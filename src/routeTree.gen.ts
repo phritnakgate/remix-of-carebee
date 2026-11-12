@@ -10,33 +10,181 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedCaregiverRouteImport } from './routes/_authenticated/caregiver'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedDevicesRouteImport } from './routes/_authenticated/devices'
+import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
+import { Route as AuthenticatedMedicinesRouteImport } from './routes/_authenticated/medicines'
+import { Route as AuthenticatedScheduleRouteImport } from './routes/_authenticated/schedule'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as ApiPublicDeviceConfirmRouteImport } from './routes/api/public/device/confirm'
+import { Route as ApiPublicDeviceScheduleRouteImport } from './routes/api/public/device/schedule'
+import { Route as ApiPublicDeviceStatusRouteImport } from './routes/api/public/device/status'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedCaregiverRoute = AuthenticatedCaregiverRouteImport.update({
+  id: '/caregiver',
+  path: '/caregiver',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDevicesRoute = AuthenticatedDevicesRouteImport.update({
+  id: '/devices',
+  path: '/devices',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedHistoryRoute = AuthenticatedHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedMedicinesRoute = AuthenticatedMedicinesRouteImport.update({
+  id: '/medicines',
+  path: '/medicines',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedScheduleRoute = AuthenticatedScheduleRouteImport.update({
+  id: '/schedule',
+  path: '/schedule',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ApiPublicDeviceConfirmRoute = ApiPublicDeviceConfirmRouteImport.update({
+  id: '/api/public/device/confirm',
+  path: '/api/public/device/confirm',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicDeviceScheduleRoute = ApiPublicDeviceScheduleRouteImport.update({
+  id: '/api/public/device/schedule',
+  path: '/api/public/device/schedule',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicDeviceStatusRoute = ApiPublicDeviceStatusRouteImport.update({
+  id: '/api/public/device/status',
+  path: '/api/public/device/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/caregiver': typeof AuthenticatedCaregiverRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/devices': typeof AuthenticatedDevicesRoute
+  '/history': typeof AuthenticatedHistoryRoute
+  '/medicines': typeof AuthenticatedMedicinesRoute
+  '/schedule': typeof AuthenticatedScheduleRoute
+  '/settings': typeof AuthenticatedSettingsRoute
+  '/api/public/device/confirm': typeof ApiPublicDeviceConfirmRoute
+  '/api/public/device/schedule': typeof ApiPublicDeviceScheduleRoute
+  '/api/public/device/status': typeof ApiPublicDeviceStatusRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/caregiver': typeof AuthenticatedCaregiverRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/devices': typeof AuthenticatedDevicesRoute
+  '/history': typeof AuthenticatedHistoryRoute
+  '/medicines': typeof AuthenticatedMedicinesRoute
+  '/schedule': typeof AuthenticatedScheduleRoute
+  '/settings': typeof AuthenticatedSettingsRoute
+  '/api/public/device/confirm': typeof ApiPublicDeviceConfirmRoute
+  '/api/public/device/schedule': typeof ApiPublicDeviceScheduleRoute
+  '/api/public/device/status': typeof ApiPublicDeviceStatusRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/_authenticated/caregiver': typeof AuthenticatedCaregiverRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/devices': typeof AuthenticatedDevicesRoute
+  '/_authenticated/history': typeof AuthenticatedHistoryRoute
+  '/_authenticated/medicines': typeof AuthenticatedMedicinesRoute
+  '/_authenticated/schedule': typeof AuthenticatedScheduleRoute
+  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/api/public/device/confirm': typeof ApiPublicDeviceConfirmRoute
+  '/api/public/device/schedule': typeof ApiPublicDeviceScheduleRoute
+  '/api/public/device/status': typeof ApiPublicDeviceStatusRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/caregiver'
+    | '/dashboard'
+    | '/devices'
+    | '/history'
+    | '/medicines'
+    | '/schedule'
+    | '/settings'
+    | '/api/public/device/confirm'
+    | '/api/public/device/schedule'
+    | '/api/public/device/status'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/caregiver'
+    | '/dashboard'
+    | '/devices'
+    | '/history'
+    | '/medicines'
+    | '/schedule'
+    | '/settings'
+    | '/api/public/device/confirm'
+    | '/api/public/device/schedule'
+    | '/api/public/device/status'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/caregiver'
+    | '/_authenticated/dashboard'
+    | '/_authenticated/devices'
+    | '/_authenticated/history'
+    | '/_authenticated/medicines'
+    | '/_authenticated/schedule'
+    | '/_authenticated/settings'
+    | '/api/public/device/confirm'
+    | '/api/public/device/schedule'
+    | '/api/public/device/status'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
+  ApiPublicDeviceConfirmRoute: typeof ApiPublicDeviceConfirmRoute
+  ApiPublicDeviceScheduleRoute: typeof ApiPublicDeviceScheduleRoute
+  ApiPublicDeviceStatusRoute: typeof ApiPublicDeviceStatusRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +196,123 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/caregiver': {
+      id: '/_authenticated/caregiver'
+      path: '/caregiver'
+      fullPath: '/caregiver'
+      preLoaderRoute: typeof AuthenticatedCaregiverRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/devices': {
+      id: '/_authenticated/devices'
+      path: '/devices'
+      fullPath: '/devices'
+      preLoaderRoute: typeof AuthenticatedDevicesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/history': {
+      id: '/_authenticated/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof AuthenticatedHistoryRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/medicines': {
+      id: '/_authenticated/medicines'
+      path: '/medicines'
+      fullPath: '/medicines'
+      preLoaderRoute: typeof AuthenticatedMedicinesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/schedule': {
+      id: '/_authenticated/schedule'
+      path: '/schedule'
+      fullPath: '/schedule'
+      preLoaderRoute: typeof AuthenticatedScheduleRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/public/device/confirm': {
+      id: '/api/public/device/confirm'
+      path: '/api/public/device/confirm'
+      fullPath: '/api/public/device/confirm'
+      preLoaderRoute: typeof ApiPublicDeviceConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/device/schedule': {
+      id: '/api/public/device/schedule'
+      path: '/api/public/device/schedule'
+      fullPath: '/api/public/device/schedule'
+      preLoaderRoute: typeof ApiPublicDeviceScheduleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/device/status': {
+      id: '/api/public/device/status'
+      path: '/api/public/device/status'
+      fullPath: '/api/public/device/status'
+      preLoaderRoute: typeof ApiPublicDeviceStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedCaregiverRoute: typeof AuthenticatedCaregiverRoute
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedDevicesRoute: typeof AuthenticatedDevicesRoute
+  AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
+  AuthenticatedMedicinesRoute: typeof AuthenticatedMedicinesRoute
+  AuthenticatedScheduleRoute: typeof AuthenticatedScheduleRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedCaregiverRoute: AuthenticatedCaregiverRoute,
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedDevicesRoute: AuthenticatedDevicesRoute,
+  AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
+  AuthenticatedMedicinesRoute: AuthenticatedMedicinesRoute,
+  AuthenticatedScheduleRoute: AuthenticatedScheduleRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
+  ApiPublicDeviceConfirmRoute: ApiPublicDeviceConfirmRoute,
+  ApiPublicDeviceScheduleRoute: ApiPublicDeviceScheduleRoute,
+  ApiPublicDeviceStatusRoute: ApiPublicDeviceStatusRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

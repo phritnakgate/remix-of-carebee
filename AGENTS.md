@@ -28,3 +28,10 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+- Dose status (taken/pending/missed) is derived at read time from schedules + `dose_logs` in `src/lib/medication.ts`, never stored or updated by cron — keeps history consistent and avoids background jobs.
+- Access to a person's data goes through the `can_access(owner_id)` SQL helper (owner or linked caregiver) in every RLS policy — one place defines who can see an elder's data.
+- Real ESP32 devices are created only by the `registerRealDevice` server function; device keys are stored hashed in `device_keys` (service role only) and verified in `src/lib/device-api.ts` by the `/api/public/device/*` routes — a trigger blocks signed-in users from writing telemetry on real devices so the UI can never fake a connection.
+- Simulated devices and their events use `mode/source = 'simulated'` and must render with the sim styling — real and simulated data are never mixed.
+- UI strings live in `src/lib/i18n.tsx` (th + en dictionaries); add every new string to both.
