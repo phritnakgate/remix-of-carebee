@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedDevicesRouteImport } from './routes/_authenticated/devices'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedMedicinesRouteImport } from './routes/_authenticated/medicines'
 import { Route as AuthenticatedScheduleRouteImport } from './routes/_authenticated/schedule'
@@ -37,6 +38,11 @@ const AuthRoute = AuthRouteImport.update({
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDevicesRoute = AuthenticatedDevicesRouteImport.update({
+  id: '/devices',
+  path: '/devices',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedHistoryRoute = AuthenticatedHistoryRouteImport.update({
@@ -74,6 +80,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/devices': typeof AuthenticatedDevicesRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/medicines': typeof AuthenticatedMedicinesRoute
   '/schedule': typeof AuthenticatedScheduleRoute
@@ -85,6 +92,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/devices': typeof AuthenticatedDevicesRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/medicines': typeof AuthenticatedMedicinesRoute
   '/schedule': typeof AuthenticatedScheduleRoute
@@ -98,6 +106,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/devices': typeof AuthenticatedDevicesRoute
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/medicines': typeof AuthenticatedMedicinesRoute
   '/_authenticated/schedule': typeof AuthenticatedScheduleRoute
@@ -111,6 +120,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/dashboard'
+    | '/devices'
     | '/history'
     | '/medicines'
     | '/schedule'
@@ -122,6 +132,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/dashboard'
+    | '/devices'
     | '/history'
     | '/medicines'
     | '/schedule'
@@ -134,6 +145,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/dashboard'
+    | '/_authenticated/devices'
     | '/_authenticated/history'
     | '/_authenticated/medicines'
     | '/_authenticated/schedule'
@@ -179,6 +191,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/devices': {
+      id: '/_authenticated/devices'
+      path: '/devices'
+      fullPath: '/devices'
+      preLoaderRoute: typeof AuthenticatedDevicesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/history': {
@@ -228,6 +247,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedDevicesRoute: typeof AuthenticatedDevicesRoute
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
   AuthenticatedMedicinesRoute: typeof AuthenticatedMedicinesRoute
   AuthenticatedScheduleRoute: typeof AuthenticatedScheduleRoute
@@ -235,6 +255,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedDevicesRoute: AuthenticatedDevicesRoute,
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
   AuthenticatedMedicinesRoute: AuthenticatedMedicinesRoute,
   AuthenticatedScheduleRoute: AuthenticatedScheduleRoute,
