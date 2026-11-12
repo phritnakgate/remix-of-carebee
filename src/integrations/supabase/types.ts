@@ -14,16 +14,357 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      caregiver_invites: {
+        Row: {
+          code: string
+          created_at: string
+          elder_id: string
+          expires_at: string
+          used_at: string | null
+          used_by: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          elder_id: string
+          expires_at?: string
+          used_at?: string | null
+          used_by?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          elder_id?: string
+          expires_at?: string
+          used_at?: string | null
+          used_by?: string | null
+        }
+        Relationships: []
+      }
+      caregiver_links: {
+        Row: {
+          caregiver_id: string
+          created_at: string
+          elder_id: string
+          id: string
+        }
+        Insert: {
+          caregiver_id: string
+          created_at?: string
+          elder_id: string
+          id?: string
+        }
+        Update: {
+          caregiver_id?: string
+          created_at?: string
+          elder_id?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      device_events: {
+        Row: {
+          created_at: string
+          device_id: string
+          event_type: string
+          id: string
+          owner_id: string
+          payload: Json
+          source: Database["public"]["Enums"]["device_mode"]
+        }
+        Insert: {
+          created_at?: string
+          device_id: string
+          event_type: string
+          id?: string
+          owner_id: string
+          payload?: Json
+          source: Database["public"]["Enums"]["device_mode"]
+        }
+        Update: {
+          created_at?: string
+          device_id?: string
+          event_type?: string
+          id?: string
+          owner_id?: string
+          payload?: Json
+          source?: Database["public"]["Enums"]["device_mode"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_events_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      device_keys: {
+        Row: {
+          created_at: string
+          device_id: string
+          key_hash: string
+        }
+        Insert: {
+          created_at?: string
+          device_id: string
+          key_hash: string
+        }
+        Update: {
+          created_at?: string
+          device_id?: string
+          key_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_keys_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: true
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      devices: {
+        Row: {
+          created_at: string
+          firmware: string | null
+          first_contact_at: string | null
+          id: string
+          key_prefix: string | null
+          last_seen_at: string | null
+          last_status: Json
+          mode: Database["public"]["Enums"]["device_mode"]
+          name: string
+          owner_id: string
+        }
+        Insert: {
+          created_at?: string
+          firmware?: string | null
+          first_contact_at?: string | null
+          id?: string
+          key_prefix?: string | null
+          last_seen_at?: string | null
+          last_status?: Json
+          mode: Database["public"]["Enums"]["device_mode"]
+          name: string
+          owner_id: string
+        }
+        Update: {
+          created_at?: string
+          firmware?: string | null
+          first_contact_at?: string | null
+          id?: string
+          key_prefix?: string | null
+          last_seen_at?: string | null
+          last_status?: Json
+          mode?: Database["public"]["Enums"]["device_mode"]
+          name?: string
+          owner_id?: string
+        }
+        Relationships: []
+      }
+      dose_logs: {
+        Row: {
+          confirmed_at: string
+          confirmed_by: string | null
+          created_at: string
+          device_id: string | null
+          id: string
+          medicine_id: string
+          owner_id: string
+          schedule_id: string | null
+          scheduled_date: string
+          slot: Database["public"]["Enums"]["time_slot"]
+          source: Database["public"]["Enums"]["dose_source"]
+        }
+        Insert: {
+          confirmed_at?: string
+          confirmed_by?: string | null
+          created_at?: string
+          device_id?: string | null
+          id?: string
+          medicine_id: string
+          owner_id: string
+          schedule_id?: string | null
+          scheduled_date: string
+          slot: Database["public"]["Enums"]["time_slot"]
+          source?: Database["public"]["Enums"]["dose_source"]
+        }
+        Update: {
+          confirmed_at?: string
+          confirmed_by?: string | null
+          created_at?: string
+          device_id?: string | null
+          id?: string
+          medicine_id?: string
+          owner_id?: string
+          schedule_id?: string | null
+          scheduled_date?: string
+          slot?: Database["public"]["Enums"]["time_slot"]
+          source?: Database["public"]["Enums"]["dose_source"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dose_logs_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dose_logs_medicine_id_fkey"
+            columns: ["medicine_id"]
+            isOneToOne: false
+            referencedRelation: "medicines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dose_logs_schedule_id_fkey"
+            columns: ["schedule_id"]
+            isOneToOne: false
+            referencedRelation: "medication_schedules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      medication_schedules: {
+        Row: {
+          created_at: string
+          days_of_week: number[]
+          dose_time: string
+          id: string
+          medicine_id: string
+          notify: boolean
+          owner_id: string
+          slot: Database["public"]["Enums"]["time_slot"]
+        }
+        Insert: {
+          created_at?: string
+          days_of_week?: number[]
+          dose_time: string
+          id?: string
+          medicine_id: string
+          notify?: boolean
+          owner_id: string
+          slot: Database["public"]["Enums"]["time_slot"]
+        }
+        Update: {
+          created_at?: string
+          days_of_week?: number[]
+          dose_time?: string
+          id?: string
+          medicine_id?: string
+          notify?: boolean
+          owner_id?: string
+          slot?: Database["public"]["Enums"]["time_slot"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medication_schedules_medicine_id_fkey"
+            columns: ["medicine_id"]
+            isOneToOne: false
+            referencedRelation: "medicines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      medicines: {
+        Row: {
+          active: boolean
+          color: string
+          compartment: number | null
+          created_at: string
+          dosage: string | null
+          food_instruction: Database["public"]["Enums"]["food_instruction"]
+          id: string
+          name: string
+          notes: string | null
+          owner_id: string
+          pills_per_dose: number
+          quantity: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          color?: string
+          compartment?: number | null
+          created_at?: string
+          dosage?: string | null
+          food_instruction?: Database["public"]["Enums"]["food_instruction"]
+          id?: string
+          name: string
+          notes?: string | null
+          owner_id: string
+          pills_per_dose?: number
+          quantity?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          color?: string
+          compartment?: number | null
+          created_at?: string
+          dosage?: string | null
+          food_instruction?: Database["public"]["Enums"]["food_instruction"]
+          id?: string
+          name?: string
+          notes?: string | null
+          owner_id?: string
+          pills_per_dose?: number
+          quantity?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          phone: string | null
+          preferred_language: string
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id: string
+          phone?: string | null
+          preferred_language?: string
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          phone?: string | null
+          preferred_language?: string
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      accept_caregiver_invite: { Args: { _code: string }; Returns: string }
+      can_access: { Args: { _owner: string }; Returns: boolean }
+      is_linked: { Args: { _other: string }; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      device_mode: "real" | "simulated"
+      dose_source: "app" | "caregiver" | "device" | "simulated"
+      food_instruction: "before_food" | "after_food" | "with_food" | "any"
+      time_slot: "morning" | "afternoon" | "evening" | "bedtime"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +491,11 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      device_mode: ["real", "simulated"],
+      dose_source: ["app", "caregiver", "device", "simulated"],
+      food_instruction: ["before_food", "after_food", "with_food", "any"],
+      time_slot: ["morning", "afternoon", "evening", "bedtime"],
+    },
   },
 } as const
