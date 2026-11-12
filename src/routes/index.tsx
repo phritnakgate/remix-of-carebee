@@ -56,7 +56,7 @@ function Landing() {
             <span className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-base font-semibold text-secondary-foreground">
               <BellRing className="size-5" aria-hidden /> {t("tagline")}
             </span>
-            <h1 className="mt-6 text-5xl font-bold leading-tight sm:text-6xl">{t("heroTitle")}</h1>
+            <h1 className="mt-6 text-4xl font-bold leading-tight sm:text-6xl">{t("heroTitle")}</h1>
             <p className="mt-6 max-w-xl text-xl text-muted-foreground">{t("heroBody")}</p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild size="xl" variant="hero">
