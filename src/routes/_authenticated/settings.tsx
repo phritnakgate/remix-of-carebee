@@ -66,21 +66,30 @@ function SettingsPage() {
       .from("profiles")
       .update({ display_name: profile.display_name?.trim() || null, phone: profile.phone?.trim() || null, timezone: profile.timezone })
       .eq("id", userId);
-    if (error) return toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success(t("saved"));
     qc.invalidateQueries({ queryKey: ["links", userId] });
   }
 
   async function createInvite() {
     const { error } = await supabase.from("caregiver_invites").insert({ code: makeCode(), elder_id: userId });
-    if (error) return toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     invites.refetch();
   }
 
   async function unlink(otherId: string, asElder: boolean) {
     const q = supabase.from("caregiver_links").delete();
     const { error } = asElder ? await q.eq("elder_id", userId).eq("caregiver_id", otherId) : await q.eq("caregiver_id", userId).eq("elder_id", otherId);
-    if (error) return toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     qc.invalidateQueries({ queryKey: ["links", userId] });
   }
 

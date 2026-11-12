@@ -246,7 +246,7 @@ function DeviceCard({
             <li key={e.id} className="flex items-center justify-between gap-3 px-4 py-3 text-base">
               <span className="font-semibold">
                 {e.event_type.replace(/_/g, " ")}
-                {typeof (e.payload as Record<string, Json>)?.medicine === "string" && ` · ${(e.payload as Record<string, string>).medicine}`}
+                {typeof (e.payload as Record<string, Json>)?.["medicine"] === "string" && ` · ${(e.payload as Record<string, string>)["medicine"]}`}
               </span>
               <span className="flex items-center gap-2 text-sm text-muted-foreground">
                 {e.source === "simulated" && <SimBadge className="py-0 text-xs" />}
@@ -312,7 +312,10 @@ function SimulatorControls({ device, status }: { device: Device; status: DeviceS
       .from("devices")
       .update({ last_status: payload as unknown as Json, last_seen_at: ts, first_contact_at: device.first_contact_at ?? ts, firmware: "sim-1.0" })
       .eq("id", device.id);
-    if (error) return toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     await supabase.from("device_events").insert({ device_id: device.id, owner_id: ownerId, event_type: "status_changed", payload: payload as unknown as Json, source: "simulated" });
     qc.invalidateQueries({ queryKey: ["devices"] });
     qc.invalidateQueries({ queryKey: ["device_events"] });
@@ -320,7 +323,10 @@ function SimulatorControls({ device, status }: { device: Device; status: DeviceS
 
   async function simulateTaken() {
     const next = doses.find((d) => d.status !== "taken");
-    if (!next) return toast.info(t("simNothingDue"));
+    if (!next) {
+      toast.info(t("simNothingDue"));
+      return;
+    }
     confirm.mutate(
       { dose: next, userId, source: "simulated", deviceId: device.id },
       {

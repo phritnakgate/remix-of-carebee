@@ -68,7 +68,7 @@ describe("schedule expansion", () => {
       logs: [log],
       now: at(12),
     });
-    expect(doses[0].status).toBe("taken");
+    expect(doses[0]?.status).toBe("taken");
   });
 });
 

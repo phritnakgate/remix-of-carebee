@@ -45,9 +45,9 @@ export function toDateKey(d: Date): string {
 }
 
 export function scheduledDate(dateKey: string, time: string): Date {
-  const [y, m, d] = dateKey.split("-").map(Number);
-  const [hh, mm] = time.split(":").map(Number);
-  return new Date(y, m - 1, d, hh, mm || 0, 0, 0);
+  const [y = 1970, m = 1, d = 1] = dateKey.split("-").map(Number);
+  const [hh = 0, mm = 0] = time.split(":").map(Number);
+  return new Date(y, m - 1, d, hh, mm, 0, 0);
 }
 
 export function doseStatus(scheduledAt: Date, taken: boolean, now: Date): DoseStatus {

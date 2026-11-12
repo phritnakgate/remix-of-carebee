@@ -59,8 +59,8 @@ export function zonedNow(timeZone: string, at = new Date()) {
 }
 
 export function timeToMinutes(time: string) {
-  const [h, m] = time.split(":").map(Number);
-  return h * 60 + (m || 0);
+  const [h = 0, m = 0] = time.split(":").map(Number);
+  return h * 60 + m;
 }
 
 type Admin = Awaited<ReturnType<typeof authenticateDevice>> extends infer R ? (R extends { admin: infer A } ? A : never) : never;

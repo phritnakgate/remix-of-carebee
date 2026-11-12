@@ -64,7 +64,10 @@ function CaregiverPage() {
     setLinking(true);
     const { error } = await supabase.rpc("accept_caregiver_invite", { _code: code.trim().toUpperCase() });
     setLinking(false);
-    if (error) return toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success(t("linked"));
     setCode("");
     qc.invalidateQueries({ queryKey: ["links", userId] });

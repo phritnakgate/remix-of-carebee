@@ -37,9 +37,9 @@ export const Route = createFileRoute("/api/public/device/status")({
 
         const prev = (device.last_status ?? {}) as Record<string, unknown>;
         const changed =
-          prev.led !== status.led ||
-          prev.buzzer !== status.buzzer ||
-          JSON.stringify(prev.compartments ?? null) !== JSON.stringify(status.compartments ?? null);
+          prev["led"] !== status.led ||
+          prev["buzzer"] !== status.buzzer ||
+          JSON.stringify(prev["compartments"] ?? null) !== JSON.stringify(status.compartments ?? null);
 
         const ts = await touchDevice(admin, device, { last_status: status, ...(firmware ? { firmware } : {}) });
         if (changed || !device.first_contact_at) {

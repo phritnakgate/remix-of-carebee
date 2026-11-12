@@ -109,7 +109,7 @@ export function useDeviceEvents(ownerId: string) {
 export function useDoses(ownerIds: string[], dates: string[], now: Date) {
   const meds = useMedicines(ownerIds);
   const scheds = useSchedules(ownerIds);
-  const logs = useDoseLogs(ownerIds, dates[0], dates[dates.length - 1]);
+  const logs = useDoseLogs(ownerIds, dates[0] ?? "", dates[dates.length - 1] ?? "");
   const ready = !!meds.data && !!scheds.data && !!logs.data;
   const doses: Dose[] = ready
     ? expandDoses({ dates, schedules: scheds.data!, medicines: meds.data!, logs: logs.data!, now })
