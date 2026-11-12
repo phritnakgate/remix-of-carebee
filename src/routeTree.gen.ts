@@ -12,11 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedCaregiverRouteImport } from './routes/_authenticated/caregiver'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDevicesRouteImport } from './routes/_authenticated/devices'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedMedicinesRouteImport } from './routes/_authenticated/medicines'
 import { Route as AuthenticatedScheduleRouteImport } from './routes/_authenticated/schedule'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as ApiPublicDeviceConfirmRouteImport } from './routes/api/public/device/confirm'
 import { Route as ApiPublicDeviceScheduleRouteImport } from './routes/api/public/device/schedule'
 import { Route as ApiPublicDeviceStatusRouteImport } from './routes/api/public/device/status'
@@ -34,6 +36,11 @@ const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedCaregiverRoute = AuthenticatedCaregiverRouteImport.update({
+  id: '/caregiver',
+  path: '/caregiver',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
@@ -60,6 +67,11 @@ const AuthenticatedScheduleRoute = AuthenticatedScheduleRouteImport.update({
   path: '/schedule',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const ApiPublicDeviceConfirmRoute = ApiPublicDeviceConfirmRouteImport.update({
   id: '/api/public/device/confirm',
   path: '/api/public/device/confirm',
@@ -79,11 +91,13 @@ const ApiPublicDeviceStatusRoute = ApiPublicDeviceStatusRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/caregiver': typeof AuthenticatedCaregiverRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/devices': typeof AuthenticatedDevicesRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/medicines': typeof AuthenticatedMedicinesRoute
   '/schedule': typeof AuthenticatedScheduleRoute
+  '/settings': typeof AuthenticatedSettingsRoute
   '/api/public/device/confirm': typeof ApiPublicDeviceConfirmRoute
   '/api/public/device/schedule': typeof ApiPublicDeviceScheduleRoute
   '/api/public/device/status': typeof ApiPublicDeviceStatusRoute
@@ -91,11 +105,13 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/caregiver': typeof AuthenticatedCaregiverRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/devices': typeof AuthenticatedDevicesRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/medicines': typeof AuthenticatedMedicinesRoute
   '/schedule': typeof AuthenticatedScheduleRoute
+  '/settings': typeof AuthenticatedSettingsRoute
   '/api/public/device/confirm': typeof ApiPublicDeviceConfirmRoute
   '/api/public/device/schedule': typeof ApiPublicDeviceScheduleRoute
   '/api/public/device/status': typeof ApiPublicDeviceStatusRoute
@@ -105,11 +121,13 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/caregiver': typeof AuthenticatedCaregiverRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/devices': typeof AuthenticatedDevicesRoute
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/medicines': typeof AuthenticatedMedicinesRoute
   '/_authenticated/schedule': typeof AuthenticatedScheduleRoute
+  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/api/public/device/confirm': typeof ApiPublicDeviceConfirmRoute
   '/api/public/device/schedule': typeof ApiPublicDeviceScheduleRoute
   '/api/public/device/status': typeof ApiPublicDeviceStatusRoute
@@ -119,11 +137,13 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/caregiver'
     | '/dashboard'
     | '/devices'
     | '/history'
     | '/medicines'
     | '/schedule'
+    | '/settings'
     | '/api/public/device/confirm'
     | '/api/public/device/schedule'
     | '/api/public/device/status'
@@ -131,11 +151,13 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/caregiver'
     | '/dashboard'
     | '/devices'
     | '/history'
     | '/medicines'
     | '/schedule'
+    | '/settings'
     | '/api/public/device/confirm'
     | '/api/public/device/schedule'
     | '/api/public/device/status'
@@ -144,11 +166,13 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/caregiver'
     | '/_authenticated/dashboard'
     | '/_authenticated/devices'
     | '/_authenticated/history'
     | '/_authenticated/medicines'
     | '/_authenticated/schedule'
+    | '/_authenticated/settings'
     | '/api/public/device/confirm'
     | '/api/public/device/schedule'
     | '/api/public/device/status'
@@ -186,6 +210,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/caregiver': {
+      id: '/_authenticated/caregiver'
+      path: '/caregiver'
+      fullPath: '/caregiver'
+      preLoaderRoute: typeof AuthenticatedCaregiverRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -221,6 +252,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedScheduleRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/public/device/confirm': {
       id: '/api/public/device/confirm'
       path: '/api/public/device/confirm'
@@ -246,19 +284,23 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedCaregiverRoute: typeof AuthenticatedCaregiverRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDevicesRoute: typeof AuthenticatedDevicesRoute
   AuthenticatedHistoryRoute: typeof AuthenticatedHistoryRoute
   AuthenticatedMedicinesRoute: typeof AuthenticatedMedicinesRoute
   AuthenticatedScheduleRoute: typeof AuthenticatedScheduleRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedCaregiverRoute: AuthenticatedCaregiverRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDevicesRoute: AuthenticatedDevicesRoute,
   AuthenticatedHistoryRoute: AuthenticatedHistoryRoute,
   AuthenticatedMedicinesRoute: AuthenticatedMedicinesRoute,
   AuthenticatedScheduleRoute: AuthenticatedScheduleRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
