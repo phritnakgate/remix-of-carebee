@@ -16,6 +16,9 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedMedicinesRouteImport } from './routes/_authenticated/medicines'
 import { Route as AuthenticatedScheduleRouteImport } from './routes/_authenticated/schedule'
+import { Route as ApiPublicDeviceConfirmRouteImport } from './routes/api/public/device/confirm'
+import { Route as ApiPublicDeviceScheduleRouteImport } from './routes/api/public/device/schedule'
+import { Route as ApiPublicDeviceStatusRouteImport } from './routes/api/public/device/status'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -51,6 +54,21 @@ const AuthenticatedScheduleRoute = AuthenticatedScheduleRouteImport.update({
   path: '/schedule',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicDeviceConfirmRoute = ApiPublicDeviceConfirmRouteImport.update({
+  id: '/api/public/device/confirm',
+  path: '/api/public/device/confirm',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicDeviceScheduleRoute = ApiPublicDeviceScheduleRouteImport.update({
+  id: '/api/public/device/schedule',
+  path: '/api/public/device/schedule',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicDeviceStatusRoute = ApiPublicDeviceStatusRouteImport.update({
+  id: '/api/public/device/status',
+  path: '/api/public/device/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -59,6 +77,9 @@ export interface FileRoutesByFullPath {
   '/history': typeof AuthenticatedHistoryRoute
   '/medicines': typeof AuthenticatedMedicinesRoute
   '/schedule': typeof AuthenticatedScheduleRoute
+  '/api/public/device/confirm': typeof ApiPublicDeviceConfirmRoute
+  '/api/public/device/schedule': typeof ApiPublicDeviceScheduleRoute
+  '/api/public/device/status': typeof ApiPublicDeviceStatusRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -67,6 +88,9 @@ export interface FileRoutesByTo {
   '/history': typeof AuthenticatedHistoryRoute
   '/medicines': typeof AuthenticatedMedicinesRoute
   '/schedule': typeof AuthenticatedScheduleRoute
+  '/api/public/device/confirm': typeof ApiPublicDeviceConfirmRoute
+  '/api/public/device/schedule': typeof ApiPublicDeviceScheduleRoute
+  '/api/public/device/status': typeof ApiPublicDeviceStatusRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -77,13 +101,33 @@ export interface FileRoutesById {
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/_authenticated/medicines': typeof AuthenticatedMedicinesRoute
   '/_authenticated/schedule': typeof AuthenticatedScheduleRoute
+  '/api/public/device/confirm': typeof ApiPublicDeviceConfirmRoute
+  '/api/public/device/schedule': typeof ApiPublicDeviceScheduleRoute
+  '/api/public/device/status': typeof ApiPublicDeviceStatusRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/auth' | '/dashboard' | '/history' | '/medicines' | '/schedule'
+    | '/'
+    | '/auth'
+    | '/dashboard'
+    | '/history'
+    | '/medicines'
+    | '/schedule'
+    | '/api/public/device/confirm'
+    | '/api/public/device/schedule'
+    | '/api/public/device/status'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/dashboard' | '/history' | '/medicines' | '/schedule'
+  to:
+    | '/'
+    | '/auth'
+    | '/dashboard'
+    | '/history'
+    | '/medicines'
+    | '/schedule'
+    | '/api/public/device/confirm'
+    | '/api/public/device/schedule'
+    | '/api/public/device/status'
   id:
     | '__root__'
     | '/'
@@ -93,12 +137,18 @@ export interface FileRouteTypes {
     | '/_authenticated/history'
     | '/_authenticated/medicines'
     | '/_authenticated/schedule'
+    | '/api/public/device/confirm'
+    | '/api/public/device/schedule'
+    | '/api/public/device/status'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiPublicDeviceConfirmRoute: typeof ApiPublicDeviceConfirmRoute
+  ApiPublicDeviceScheduleRoute: typeof ApiPublicDeviceScheduleRoute
+  ApiPublicDeviceStatusRoute: typeof ApiPublicDeviceStatusRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -152,6 +202,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedScheduleRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/device/confirm': {
+      id: '/api/public/device/confirm'
+      path: '/api/public/device/confirm'
+      fullPath: '/api/public/device/confirm'
+      preLoaderRoute: typeof ApiPublicDeviceConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/device/schedule': {
+      id: '/api/public/device/schedule'
+      path: '/api/public/device/schedule'
+      fullPath: '/api/public/device/schedule'
+      preLoaderRoute: typeof ApiPublicDeviceScheduleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/device/status': {
+      id: '/api/public/device/status'
+      path: '/api/public/device/status'
+      fullPath: '/api/public/device/status'
+      preLoaderRoute: typeof ApiPublicDeviceStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -176,6 +247,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiPublicDeviceConfirmRoute: ApiPublicDeviceConfirmRoute,
+  ApiPublicDeviceScheduleRoute: ApiPublicDeviceScheduleRoute,
+  ApiPublicDeviceStatusRoute: ApiPublicDeviceStatusRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
