@@ -39,6 +39,10 @@ export const Route = createFileRoute("/api/public/device/confirm")({
             .filter((d) => d.compartment === parsed.data.compartment && !d.taken)
             .sort((a, b) => Math.abs(timeToMinutes(a.time) - now.minutes) - Math.abs(timeToMinutes(b.time) - now.minutes))[0];
         }
+        if (!dose && parsed.data.compartment) {
+          // Everything for this compartment is already confirmed today.
+          dose = doses.find((d) => d.compartment === parsed.data.compartment && d.taken);
+        }
         if (!dose) return json({ error: "No matching dose scheduled today" }, 404);
         if (dose.taken) return json({ ok: true, already_confirmed: true, schedule_id: dose.schedule_id });
 
