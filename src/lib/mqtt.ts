@@ -55,6 +55,42 @@ export interface MqttConnection {
   failed: boolean;
 }
 
+export type MqttDirection = "incoming" | "outgoing";
+export type MqttMessageState =
+  | "received"
+  | "processed"
+  | "notProcessed"
+  | "retained"
+  | "oversize"
+  | "sending"
+  | "acknowledged"
+  | "sendFailed";
+
+export interface MqttMessage {
+  id: number;
+  at: number;
+  topic: string;
+  payload: string;
+  state: MqttMessageState;
+}
+
+export type MqttTraffic = Record<MqttDirection, MqttMessage[]>;
+
+export function mqttPayloadPreview(message: string) {
+  let preview = message;
+  try {
+    preview = JSON.stringify(
+      JSON.parse(message),
+      (key, value: unknown) => (key.toLowerCase() === "device_key" ? "••••" : value),
+      2,
+    );
+  } catch {
+    // MQTT can carry plain text or an incomplete preview of a large packet.
+  }
+  preview = preview.replace(/smrb_[0-9a-f]+/gi, "••••");
+  return preview.length > 2048 ? `${preview.slice(0, 2048)}…` : preview;
+}
+
 export const mqttDefaults: MqttSettings = {
   host: "broker.hivemq.com",
   websocketPort: 8884,

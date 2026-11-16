@@ -25,6 +25,8 @@ npm run dev
 
 ## ESP32 MQTT
 
+[คู่มือใช้งาน CareBee ภาษาไทย](docs/carebee-user-guide.th.md)
+
 1. Sign in and open **Reminder box → ESP32 setup · MQTT** on a real box.
 2. For a HiveMQ public broker demo, leave the defaults of `broker.hivemq.com`, WSS port `8884`, and path `/mqtt`. Configure the ESP32 on the same broker using MQTT TCP port `1883`. The HTTPS web app uses WSS.
 3. Subscribe the ESP32 to `medicine/schedule/<box-id>` and publish its reports on `medicine/sensor/<box-id>`. Use the complete topics shown in the UI if you change their prefixes.

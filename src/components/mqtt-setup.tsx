@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { MqttTrafficPanel } from "@/components/mqtt-traffic";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,7 +34,7 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(() => readMqttSettings(deviceId) ?? mqttDefaults);
-  const { connections, connect, disconnect } = useMqttSession();
+  const { connections, traffic, clearTraffic, connect, disconnect } = useMqttSession();
   const medicines = useMedicines(open ? [ownerId] : []);
   const connection = connections[deviceId];
   const settings = connection?.settings ?? draft;
@@ -68,6 +69,8 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
 
       <p className="mt-3 text-sm text-muted-foreground">{t("mqttKeepTabOpen")}</p>
       <p className="mt-1 text-sm text-muted-foreground">{t("mqttPublicBrokerHint")}</p>
+
+      <MqttTrafficPanel logs={traffic[deviceId]} onClear={() => clearTraffic(deviceId)} />
 
       <form
         className="mt-4 space-y-4"

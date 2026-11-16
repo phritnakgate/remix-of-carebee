@@ -10,7 +10,16 @@ import {
   type ReactNode,
 } from "react";
 
-import { boxTopic, mqttSettingsSchema, type MqttConnection, type MqttSettings } from "./mqtt";
+import {
+  boxTopic,
+  mqttPayloadPreview,
+  mqttSettingsSchema,
+  type MqttConnection,
+  type MqttDirection,
+  type MqttMessageState,
+  type MqttSettings,
+  type MqttTraffic,
+} from "./mqtt";
 import { forwardMqttSensor, getMqttDue } from "./mqtt.functions";
 import { useDevices } from "./queries";
 
@@ -57,11 +66,15 @@ interface Session {
 
 interface SessionContext {
   connections: Partial<Record<string, MqttConnection>>;
+  traffic: Partial<Record<string, MqttTraffic>>;
+  clearTraffic: (deviceId: string) => void;
   connect: (deviceId: string, settings: MqttSettings) => void;
   disconnect: (deviceId: string) => void;
 }
 
 const Context = createContext<SessionContext | null>(null);
+const emptyTraffic: MqttTraffic = { incoming: [], outgoing: [] };
+const historyLimit = 30;
 
 export function useMqttSession() {
   const value = useContext(Context);
@@ -71,6 +84,8 @@ export function useMqttSession() {
 
 export function MqttSessionProvider({ userId, children }: { userId: string; children: ReactNode }) {
   const [connections, setConnections] = useState<SessionContext["connections"]>({});
+  const [traffic, setTraffic] = useState<SessionContext["traffic"]>({});
+  const nextMessageId = useRef(0);
   const sessions = useRef(new Map<string, Session>());
   const restored = useRef(new Set<string>());
   const devices = useDevices(userId).data;
@@ -90,6 +105,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
     const pageHide = () => {
       closeAll();
       setConnections({});
+      setTraffic({});
     };
     window.addEventListener("pagehide", pageHide);
     window.addEventListener("pageshow", checkAll);
@@ -104,6 +120,51 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
       closeAll();
     };
   }, []);
+
+  const recordTraffic = useCallback(
+    (
+      deviceId: string,
+      direction: MqttDirection,
+      topic: string,
+      payload: string,
+      state: MqttMessageState,
+    ) => {
+      const message = {
+        id: ++nextMessageId.current,
+        at: Date.now(),
+        topic,
+        payload: mqttPayloadPreview(payload),
+        state,
+      };
+      setTraffic((previous) => {
+        const box = previous[deviceId] ?? emptyTraffic;
+        return {
+          ...previous,
+          [deviceId]: { ...box, [direction]: [message, ...box[direction]].slice(0, historyLimit) },
+        };
+      });
+
+      return (state: MqttMessageState) =>
+        setTraffic((previous) => {
+          const box = previous[deviceId];
+          if (!box?.[direction].some((entry) => entry.id === message.id)) return previous;
+          return {
+            ...previous,
+            [deviceId]: {
+              ...box,
+              [direction]: box[direction].map((entry) =>
+                entry.id === message.id ? { ...entry, state } : entry,
+              ),
+            },
+          };
+        });
+    },
+    [],
+  );
+
+  function clearTraffic(deviceId: string) {
+    setTraffic((previous) => ({ ...previous, [deviceId]: undefined }));
+  }
 
   const disconnect = useCallback((deviceId: string) => {
     const saved = readSavedConnection(deviceId);
@@ -199,16 +260,31 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
                   timezone: due.timezone,
                   ...dose,
                 });
+              const markSent = recordTraffic(
+                deviceId,
+                "outgoing",
+                scheduleTopic,
+                payload,
+                "sending",
+              );
               const acknowledged = await new Promise<boolean>((resolve) => {
                 const timeout = window.setTimeout(() => {
                   if (client === connected) retry();
                   resolve(false);
                 }, 7000);
-                connected.publish(scheduleTopic, payload, { qos: 1, retain: false }, (error) => {
+                const finish = (success: boolean) => {
                   window.clearTimeout(timeout);
-                  resolve(!error);
-                });
+                  resolve(success);
+                };
+                try {
+                  connected.publish(scheduleTopic, payload, { qos: 1, retain: false }, (error) =>
+                    finish(!error),
+                  );
+                } catch {
+                  finish(false);
+                }
               });
+              markSent(acknowledged ? "acknowledged" : "sendFailed");
               if (!acknowledged) return;
               sent.add(dose.schedule_id);
               try {
@@ -244,19 +320,29 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
             if (client === socket) retry();
           });
           socket.handleMessage = (packet, done) => {
-            if (
-              client !== socket ||
-              packet.topic !== sensorTopic ||
-              packet.retain ||
-              packet.payload.length > 8192
-            ) {
+            if (client !== socket || packet.topic !== sensorTopic) {
               done();
               return;
             }
-            void forward({ data: { deviceId, message: packet.payload.toString("utf8") } }).then(
-              () => done(),
-              () => done(),
+            const oversize = packet.payload.length > 8192;
+            const message = packet.payload.toString("utf8", 0, 8192);
+            const markReceived = recordTraffic(
+              deviceId,
+              "incoming",
+              sensorTopic,
+              message,
+              packet.retain ? "retained" : oversize ? "oversize" : "received",
             );
+            if (packet.retain || oversize) {
+              done();
+              return;
+            }
+            void forward({ data: { deviceId, message } })
+              .then(
+                (accepted) => markReceived(accepted ? "processed" : "notProcessed"),
+                () => markReceived("notProcessed"),
+              )
+              .finally(done);
           };
           socket.once("connect", () => {
             subscribeTimer = window.setTimeout(() => {
@@ -290,7 +376,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
       });
       void open();
     },
-    [disconnect, forward, getDue],
+    [disconnect, forward, getDue, recordTraffic],
   );
 
   useEffect(() => {
@@ -309,6 +395,8 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
   }, [connect, devices]);
 
   return (
-    <Context.Provider value={{ connections, connect, disconnect }}>{children}</Context.Provider>
+    <Context.Provider value={{ connections, traffic, clearTraffic, connect, disconnect }}>
+      {children}
+    </Context.Provider>
   );
 }

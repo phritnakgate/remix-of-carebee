@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import mqtt from "mqtt";
 
@@ -151,7 +151,8 @@ it("keeps MQTT on another CareBee page, sends the due dose once, and closes on p
   await waitFor(() => expect(getMqttDue).toHaveBeenCalledTimes(3));
   expect(socket.publish).toHaveBeenCalledTimes(1);
 
-  const message = '{"status":{"led":"on"}}';
+  const secret = "smrb_" + "0".repeat(48);
+  const message = JSON.stringify({ device_key: secret, status: { led: "on" } });
   const ack = vi.fn();
   vi.mocked(forwardMqttSensor).mockResolvedValue(true);
   socket.handleMessage(
@@ -163,6 +164,22 @@ it("keeps MQTT on another CareBee page, sends the due dose once, and closes on p
   await waitFor(() => expect(ack).toHaveBeenCalled());
   expect(forwardMqttSensor).toHaveBeenCalledWith({ data: { deviceId, message } });
 
+  screenTree.rerender(<MqttSessionProvider userId="owner">{setupPage()}</MqttSessionProvider>);
+  openSettings();
+  const monitor = within(screen.getByRole("region", { name: "mqttTraffic" }));
+  const incoming = within(monitor.getByRole("list", { name: "mqttIncoming" }));
+  expect(incoming.getByText("mqttMessageProcessed")).toBeInTheDocument();
+  expect(incoming.getByText("mqttMessageRetained")).toBeInTheDocument();
+  expect(incoming.getAllByText(/••••/)).toHaveLength(2);
+  expect(incoming.queryByText(new RegExp(secret))).not.toBeInTheDocument();
+  const outgoing = within(monitor.getByRole("list", { name: "mqttOutgoing" }));
+  expect(outgoing.getByText("mqttMessageAcknowledged")).toBeInTheDocument();
+  expect(outgoing.getByText(/16:00/)).toBeInTheDocument();
+
+  fireEvent.click(monitor.getByRole("button", { name: "mqttClearTraffic" }));
+  expect(monitor.getByText("mqttIncomingEmpty")).toBeInTheDocument();
+  expect(monitor.getByText("mqttOutgoingEmpty")).toBeInTheDocument();
+  expect(socket.end).not.toHaveBeenCalled();
   fireEvent(window, new Event("pagehide"));
   expect(socket.end).toHaveBeenCalledWith(true);
 });
