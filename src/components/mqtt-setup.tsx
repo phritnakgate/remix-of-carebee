@@ -56,7 +56,11 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
   const medicines = useMedicines(open ? [ownerId] : []);
   const status = useQuery({
     queryKey,
-    queryFn: () => manage({ data: { action: "status", deviceId } }),
+    queryFn: async () => {
+      const result = await manage({ data: { action: "status", deviceId } });
+      if (result.error) throw new Error(result.error);
+      return result.connection;
+    },
     enabled: open,
     refetchInterval: open ? 3000 : false,
     retry: false,
@@ -71,17 +75,19 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
         );
         return;
       }
-      queryClient.setQueryData(queryKey, result);
+      queryClient.setQueryData(queryKey, result.connection);
       setDraft(null);
     },
     onError: () => toast.error(t("mqttUnavailable")),
-    onSettled: () => queryClient.invalidateQueries({ queryKey }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey });
+    },
   });
 
-  const connection = status.data && !status.data.error ? status.data.connection : undefined;
+  const connection = status.data;
   const settings =
     (connection?.enabled ? connection.settings : draft) ?? connection?.settings ?? mqttDefaults;
-  const unavailable = status.isError || !!status.data?.error;
+  const unavailable = status.isError;
   const phase =
     change.isPending && change.variables?.action === "connect"
       ? "connecting"
@@ -89,7 +95,7 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
         ? "disconnected"
         : (connection?.state ?? "disconnected");
   const indicator = states[phase];
-  const locked = !connection || unavailable || connection.enabled || change.isPending;
+  const locked = connection?.enabled || change.isPending;
   const field = (name: string) => `${deviceId}-mqtt-${name}`;
   const patch = (values: Partial<MqttSettings>) => setDraft({ ...settings, ...values });
 
