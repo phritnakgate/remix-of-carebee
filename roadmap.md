@@ -1,0 +1,4 @@
+- [ ] Add secure per-device MQTT broker configuration and bridge connection controls.
+- [ ] Add an always-on MQTT bridge service scaffold with inbound sensor callbacks and scheduled dose publishing.
+- [ ] Add per-box topic identifiers, storage rules, and bilingual setup guidance.
+- [ ] Verify UI and code; report that bridge deployment and recurring one-minute schedule require user action.
