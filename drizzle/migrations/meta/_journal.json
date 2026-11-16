@@ -1,13 +1,5 @@
 {
   "version": "7",
   "dialect": "postgresql",
-  "entries": [
-    {
-      "idx": 0,
-      "version": "7",
-      "when": 1794491656101,
-      "tag": "0000_smart_medicine_box_schema",
-      "breakpoints": true
-    }
-  ]
+  "entries": []
 }
