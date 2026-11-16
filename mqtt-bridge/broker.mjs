@@ -4,14 +4,17 @@ import tls from "node:tls";
 import ipaddr from "ipaddr.js";
 import mqtt from "mqtt";
 
-export async function resolveBroker(host, privateHosts) {
+export async function resolveBroker(host, privateHosts, attempt) {
   const addresses = await lookup(host, { all: true });
-  const address = addresses.find(({ address }) => {
+  const allowed = addresses.filter(({ address }) => {
     const ip = ipaddr.process(address);
     return ip.range() === "unicast" || privateHosts.has(host);
   });
-  if (!address) throw new Error("Broker address is unavailable");
-  return address;
+  if (!allowed.length) throw new Error("Broker address is unavailable");
+
+  // Start with IPv4 on dual-stack brokers and rotate through the checked addresses on retry.
+  allowed.sort((a, b) => a.family - b.family || a.address.localeCompare(b.address));
+  return allowed[attempt % allowed.length];
 }
 
 export function createBrokerClient(settings, { address, family }, clientId, credentials) {

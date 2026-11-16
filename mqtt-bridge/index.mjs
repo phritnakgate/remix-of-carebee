@@ -105,6 +105,7 @@ function retry(session, client) {
   session.state = "disconnected";
   session.failed = true;
   session.client = null;
+  session.addressAttempt += 1;
   clearTimeout(session.subscribeTimeout);
   client?.end(true);
   session.retry = setTimeout(() => {
@@ -118,7 +119,11 @@ async function openBroker(session) {
   session.failed = false;
   let client = null;
   try {
-    const address = await resolveBroker(session.settings.host, privateHosts);
+    const address = await resolveBroker(
+      session.settings.host,
+      privateHosts,
+      session.addressAttempt,
+    );
     if (sessions.get(session.id) !== session) return;
     const { host, transport, ports } = session.settings;
     const endpoint = `${transport}://${host}:${ports[transport]}`;
@@ -160,6 +165,7 @@ async function openBroker(session) {
 
 function start(id, settings) {
   const session = {
+    addressAttempt: 0,
     id,
     settings,
     state: "connecting",
