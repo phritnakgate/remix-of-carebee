@@ -1,5 +1,3 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -7,27 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useI18n, type DictKey } from "@/lib/i18n";
-import {
-  boxTopic,
-  mqttDefaults,
-  mqttSettingsSchema,
-  type MqttCommand,
-  type MqttSettings,
-  type MqttTransport,
-} from "@/lib/mqtt";
-import { manageMqttConnection } from "@/lib/mqtt.functions";
+import { useI18n } from "@/lib/i18n";
+import { boxTopic, mqttDefaults, mqttSettingsSchema, type MqttSettings } from "@/lib/mqtt";
+import { readMqttSettings, useMqttSession } from "@/lib/mqtt-session";
 import { useMedicines } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
-const transports = {
-  mqtt: "mqttTcpPort",
-  ws: "mqttWsPort",
-  mqtts: "mqttTlsTcpPort",
-  wss: "mqttTlsWsPort",
-} satisfies Record<MqttTransport, DictKey>;
-
-const transportKeys: MqttTransport[] = ["mqtt", "ws", "mqtts", "wss"];
 const states = {
   disconnected: {
     label: "mqttDisconnected",
@@ -49,53 +32,13 @@ const states = {
 export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: string }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<MqttSettings | null>(null);
-  const manage = useServerFn(manageMqttConnection);
-  const queryClient = useQueryClient();
-  const queryKey = ["mqtt-connection", deviceId];
+  const [draft, setDraft] = useState(() => readMqttSettings(deviceId) ?? mqttDefaults);
+  const { connections, connect, disconnect } = useMqttSession();
   const medicines = useMedicines(open ? [ownerId] : []);
-  const status = useQuery({
-    queryKey,
-    queryFn: async () => {
-      const result = await manage({ data: { action: "status", deviceId } });
-      if (result.error) throw new Error(result.error);
-      return result.connection;
-    },
-    enabled: open,
-    refetchInterval: open ? 3000 : false,
-    retry: false,
-  });
-  const change = useMutation({
-    mutationFn: (data: MqttCommand) => manage({ data }),
-    onMutate: async () => queryClient.cancelQueries({ queryKey }),
-    onSuccess: (result) => {
-      if (result.error) {
-        toast.error(
-          t(result.error === "disconnectFirst" ? "mqttDisconnectFirst" : "mqttUnavailable"),
-        );
-        return;
-      }
-      queryClient.setQueryData(queryKey, result.connection);
-      setDraft(null);
-    },
-    onError: () => toast.error(t("mqttUnavailable")),
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey });
-    },
-  });
-
-  const connection = status.data;
-  const settings =
-    (connection?.enabled ? connection.settings : draft) ?? connection?.settings ?? mqttDefaults;
-  const unavailable = status.isError;
-  const phase =
-    change.isPending && change.variables?.action === "connect"
-      ? "connecting"
-      : unavailable
-        ? "disconnected"
-        : (connection?.state ?? "disconnected");
-  const indicator = states[phase];
-  const locked = connection?.enabled || change.isPending;
+  const connection = connections[deviceId];
+  const settings = connection?.settings ?? draft;
+  const indicator = states[connection?.state ?? "disconnected"];
+  const locked = !!connection;
   const field = (name: string) => `${deviceId}-mqtt-${name}`;
   const patch = (values: Partial<MqttSettings>) => setDraft({ ...settings, ...values });
 
@@ -118,16 +61,13 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
           <span aria-hidden className={cn("size-2.5 rounded-full", indicator.dot)} />
           {t(indicator.label)}
         </span>
-        {unavailable && (
-          <span className="text-sm text-muted-foreground">{t("mqttUnavailable")}</span>
-        )}
-        {status.isPending && !unavailable && (
-          <span className="text-sm text-muted-foreground">{t("loading")}</span>
-        )}
-        {connection?.failed && !unavailable && (
+        {connection?.failed && (
           <span className="text-sm text-muted-foreground">{t("mqttRetrying")}</span>
         )}
       </div>
+
+      <p className="mt-3 text-sm text-muted-foreground">{t("mqttKeepTabOpen")}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{t("mqttPublicBrokerHint")}</p>
 
       <form
         className="mt-4 space-y-4"
@@ -139,7 +79,8 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
             toast.error(t("mqttInvalidSettings"));
             return;
           }
-          change.mutate({ action: "connect", deviceId, settings: parsed.data });
+          setDraft(parsed.data);
+          connect(deviceId, parsed.data);
         }}
       >
         <fieldset disabled={locked} className="space-y-5 disabled:opacity-70">
@@ -156,48 +97,27 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor={field("transport")}>{t("mqttTransport")}</Label>
-              <select
-                id={field("transport")}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={settings.transport}
-                onChange={(event) => patch({ transport: event.target.value as MqttTransport })}
-              >
-                {transportKeys.map((transport) => (
-                  <option key={transport} value={transport}>
-                    {t(transports[transport])}
-                  </option>
-                ))}
-              </select>
+              <Label htmlFor={field("port")}>{t("mqttTlsWsPort")}</Label>
+              <Input
+                id={field("port")}
+                required
+                type="number"
+                min={1}
+                max={65535}
+                value={settings.websocketPort || ""}
+                onChange={(event) => patch({ websocketPort: Number(event.target.value) })}
+              />
             </div>
-            {transportKeys.map((transport) => (
-              <div className="space-y-2" key={transport}>
-                <Label htmlFor={field(transport)}>{t(transports[transport])}</Label>
-                <Input
-                  id={field(transport)}
-                  required
-                  type="number"
-                  min={1}
-                  max={65535}
-                  value={settings.ports[transport] || ""}
-                  onChange={(event) =>
-                    patch({ ports: { ...settings.ports, [transport]: Number(event.target.value) } })
-                  }
-                />
-              </div>
-            ))}
-            {(settings.transport === "ws" || settings.transport === "wss") && (
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor={field("path")}>{t("mqttWsPath")}</Label>
-                <Input
-                  id={field("path")}
-                  value={settings.websocketPath}
-                  onChange={(event) => patch({ websocketPath: event.target.value })}
-                  required
-                  maxLength={200}
-                />
-              </div>
-            )}
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor={field("path")}>{t("mqttWsPath")}</Label>
+              <Input
+                id={field("path")}
+                value={settings.websocketPath}
+                onChange={(event) => patch({ websocketPath: event.target.value })}
+                required
+                maxLength={200}
+              />
+            </div>
             <div className="min-w-0 space-y-2">
               <Label htmlFor={field("sensor")}>{t("mqttSensorTopic")}</Label>
               <Input
@@ -276,13 +196,8 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
           </div>
         </fieldset>
 
-        {connection?.enabled ? (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={change.isPending}
-            onClick={() => change.mutate({ action: "disconnect", deviceId })}
-          >
+        {connection ? (
+          <Button type="button" variant="outline" onClick={() => disconnect(deviceId)}>
             {t("mqttDisconnect")}
           </Button>
         ) : (

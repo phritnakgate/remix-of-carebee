@@ -1,109 +1,192 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { expect, it, vi } from "vitest";
+import { EventEmitter } from "node:events";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, expect, it, vi } from "vitest";
+import mqtt from "mqtt";
 
 import { MqttSetup } from "@/components/mqtt-setup";
-import { mqttCommandSchema, mqttDefaults, type MqttConnection } from "@/lib/mqtt";
-import { manageMqttConnection } from "@/lib/mqtt.functions";
+import { getMqttDue, forwardMqttSensor } from "@/lib/mqtt.functions";
+import { MqttSessionProvider } from "@/lib/mqtt-session";
 
-vi.mock("@tanstack/react-start", () => ({ useServerFn: (fn: unknown) => fn }));
-vi.mock("@/lib/mqtt.functions", () => ({ manageMqttConnection: vi.fn() }));
+vi.mock("@tanstack/react-start", () => ({
+  createClientOnlyFn: (fn: unknown) => fn,
+  useServerFn: (fn: unknown) => fn,
+}));
+vi.mock("@/lib/mqtt.functions", () => ({ getMqttDue: vi.fn(), forwardMqttSensor: vi.fn() }));
 vi.mock("@/lib/i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
-vi.mock("@/lib/queries", () => ({ useMedicines: () => ({ data: [], isPending: false }) }));
+vi.mock("@/lib/queries", () => {
+  const devices = [{ id: "26a30a57-02d1-4e6e-9844-49824afc4d12", mode: "real" }];
+  return {
+    useMedicines: () => ({ data: [], isPending: false }),
+    useDevices: () => ({ data: devices }),
+  };
+});
+vi.mock("mqtt", () => ({ default: { connect: vi.fn() } }));
 
-it("lets users fill in broker settings before status loads and when the bridge is unavailable", async () => {
-  const manage = vi.mocked(manageMqttConnection);
-  let finishStatus = () => {};
-  const status = new Promise<void>((resolve) => {
-    finishStatus = resolve;
-  });
-  manage.mockImplementation(async () => {
-    await status;
-    return { error: "unavailable" };
-  });
-
-  render(
-    <QueryClientProvider client={new QueryClient()}>
-      <MqttSetup deviceId="26a30a57-02d1-4e6e-9844-49824afc4d12" ownerId="owner" />
-    </QueryClientProvider>,
-  );
-  const details = screen.getByText("mqttSetup").closest("details")!;
-  details.open = true;
-  fireEvent(details, new Event("toggle"));
-  const host = screen.getByLabelText("mqttHost");
-  expect(host).toBeEnabled();
-  fireEvent.change(host, { target: { value: "broker.example.com" } });
-
-  finishStatus();
-  await screen.findByText("mqttUnavailable");
-  expect(host).toBeEnabled();
-  expect(host).toHaveValue("broker.example.com");
-  expect(screen.getByRole("button", { name: "mqttConnect" })).toBeEnabled();
+const deviceId = "26a30a57-02d1-4e6e-9844-49824afc4d12";
+const sensorTopic = "medicine/sensor/" + deviceId;
+const date = "2026-11-16";
+const dose = {
+  schedule_id: "77d23b38-6a60-4b24-b9f3-549c38a931a2",
+  medicine_id: "77d23b38-6a60-4b24-b9f3-549c38a931a3",
+  medicine: "Demo",
+  dosage: "1",
+  pills: 1,
+  food_instruction: "before_food" as const,
+  compartment: 1,
+  slot: "evening" as const,
+  time: "16:00",
+  reminder: true,
+  taken: false,
+  confirmed_at: null,
+};
+const due = (doses: (typeof dose)[]) => ({
+  date,
+  timezone: "Asia/Bangkok",
+  minute: Math.floor(Date.now() / 60000),
+  doses,
 });
 
-it("locks a box's broker settings while connected and allows a broker change after disconnect", async () => {
-  const deviceId = "26a30a57-02d1-4e6e-9844-49824afc4d12";
-  let connection: MqttConnection = {
-    settings: mqttDefaults,
-    enabled: false,
-    state: "disconnected",
-    failed: false,
-  };
-  const manage = vi.mocked(manageMqttConnection);
-  let statusUnavailable = false;
-  let finishConnect: () => void = () => {};
-  const connect = new Promise<void>((resolve) => {
-    finishConnect = resolve;
+function fixture() {
+  const socket = Object.assign(new EventEmitter(), {
+    connected: false,
+    connect: vi.fn(),
+    end: vi.fn(),
+    handleMessage: (
+      _packet: { topic: string; retain: boolean; payload: Buffer },
+      _done: () => void,
+    ) => {},
+    subscribe: vi.fn((_topic, _options, callback: (...args: unknown[]) => void) =>
+      callback(null, [{ qos: 1 }]),
+    ),
+    publish: vi.fn((_topic, _payload, _options, callback: () => void) => callback()),
   });
-  manage.mockImplementation(async (options) => {
-    const data = mqttCommandSchema.parse(options?.data);
-    if (data.action === "status" && statusUnavailable) return { error: "unavailable" };
-    if (data.action === "connect") {
-      await connect;
-      connection = { ...connection, settings: data.settings, enabled: true, state: "connected" };
-    }
-    if (data.action === "disconnect") {
-      connection = { ...connection, enabled: false, state: "disconnected" };
-    }
-    return { connection };
-  });
+  vi.mocked(mqtt.connect).mockReturnValue(socket as unknown as ReturnType<typeof mqtt.connect>);
+  return socket;
+}
 
-  const queryClient = new QueryClient();
-  render(
-    <QueryClientProvider client={queryClient}>
-      <MqttSetup deviceId={deviceId} ownerId="owner" />
-    </QueryClientProvider>,
-  );
+function setupPage() {
+  return <MqttSetup deviceId={deviceId} ownerId="owner" />;
+}
+
+function openSettings() {
   const details = screen.getByText("mqttSetup").closest("details")!;
   details.open = true;
   fireEvent(details, new Event("toggle"));
-  const host = screen.getByLabelText("mqttHost");
-  await waitFor(() => expect(host).toBeEnabled());
-  expect(screen.getByText(`medicine/schedule/${deviceId}`)).toBeInTheDocument();
-  expect(screen.getByRole("status")).toHaveTextContent("mqttDisconnected");
+}
 
-  fireEvent.change(host, { target: { value: "broker.example.com" } });
+beforeEach(() => {
+  vi.resetAllMocks();
+  localStorage.clear();
+  vi.mocked(getMqttDue).mockResolvedValue(due([]));
+});
+
+it("connects directly over WSS and locks settings through connection until Disconnect", async () => {
+  const socket = fixture();
+  render(<MqttSessionProvider userId="owner">{setupPage()}</MqttSessionProvider>);
+  openSettings();
+  const host = screen.getByLabelText("mqttHost");
+  expect(host).toBeEnabled();
+  expect(host).toHaveValue("broker.hivemq.com");
   fireEvent.click(screen.getByRole("button", { name: "mqttConnect" }));
-  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("mqttConnecting"));
   expect(host).toBeDisabled();
-  finishConnect();
+  expect(screen.getByRole("status")).toHaveTextContent("mqttConnecting");
+  await waitFor(() => expect(socket.connect).toHaveBeenCalled());
+  expect(mqtt.connect).toHaveBeenCalledWith(
+    "wss://broker.hivemq.com:8884/mqtt",
+    expect.any(Object),
+  );
+
+  socket.connected = true;
+  act(() => {
+    socket.emit("connect");
+  });
   await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("mqttConnected"));
+  expect(socket.subscribe).toHaveBeenCalledWith(sensorTopic, { qos: 1 }, expect.any(Function));
   expect(host).toBeDisabled();
-  expect(manage).toHaveBeenCalledWith({
-    data: {
-      action: "connect",
-      deviceId,
-      settings: { ...mqttDefaults, host: "broker.example.com" },
-    },
+
+  fireEvent.click(screen.getByRole("button", { name: "mqttDisconnect" }));
+  expect(host).toBeEnabled();
+  expect(socket.end).toHaveBeenCalledWith(true);
+  expect(screen.getByRole("status")).toHaveTextContent("mqttDisconnected");
+});
+
+it("keeps MQTT on another CareBee page, sends the due dose once, and closes on page hide", async () => {
+  const socket = fixture();
+  const interval = vi.spyOn(window, "setInterval");
+  const screenTree = render(
+    <MqttSessionProvider userId="owner">{setupPage()}</MqttSessionProvider>,
+  );
+  const tick = interval.mock.calls.find(([, delay]) => delay === 5000)?.[0];
+  interval.mockRestore();
+  openSettings();
+  fireEvent.click(screen.getByRole("button", { name: "mqttConnect" }));
+  await waitFor(() => expect(socket.connect).toHaveBeenCalled());
+  socket.connected = true;
+  act(() => {
+    socket.emit("connect");
+  });
+  await waitFor(() => expect(getMqttDue).toHaveBeenCalledTimes(1));
+  expect(socket.publish).not.toHaveBeenCalled();
+
+  screenTree.rerender(
+    <MqttSessionProvider userId="owner">
+      <p>Dashboard</p>
+    </MqttSessionProvider>,
+  );
+  vi.mocked(getMqttDue).mockImplementation(async () => due([dose]));
+  if (typeof tick !== "function") throw new Error("MQTT schedule timer did not start");
+  act(() => {
+    tick();
+  });
+  await waitFor(() => expect(socket.publish).toHaveBeenCalledTimes(1));
+  const [topic, payload] = socket.publish.mock.calls[0]!;
+  expect(topic).toBe("medicine/schedule/" + deviceId);
+  expect(JSON.parse(payload)).toMatchObject({
+    time: "16:00",
+    compartment: 1,
+    schedule_id: dose.schedule_id,
   });
 
-  statusUnavailable = true;
-  void queryClient.invalidateQueries({ queryKey: ["mqtt-connection", deviceId] });
-  await screen.findByText("mqttUnavailable");
-  expect(host).toBeDisabled();
-  statusUnavailable = false;
+  fireEvent(document, new Event("visibilitychange"));
+  await waitFor(() => expect(getMqttDue).toHaveBeenCalledTimes(3));
+  expect(socket.publish).toHaveBeenCalledTimes(1);
+
+  const message = '{"status":{"led":"on"}}';
+  const ack = vi.fn();
+  vi.mocked(forwardMqttSensor).mockResolvedValue(true);
+  socket.handleMessage(
+    { topic: sensorTopic, retain: true, payload: Buffer.from(message) },
+    vi.fn(),
+  );
+  expect(forwardMqttSensor).not.toHaveBeenCalled();
+  socket.handleMessage({ topic: sensorTopic, retain: false, payload: Buffer.from(message) }, ack);
+  await waitFor(() => expect(ack).toHaveBeenCalled());
+  expect(forwardMqttSensor).toHaveBeenCalledWith({ data: { deviceId, message } });
+
+  fireEvent(window, new Event("pagehide"));
+  expect(socket.end).toHaveBeenCalledWith(true);
+});
+
+it("restores the connection when reopening CareBee until the user disconnects", async () => {
+  const socket = fixture();
+  const page = <MqttSessionProvider userId="owner">{setupPage()}</MqttSessionProvider>;
+  const first = render(page);
+  openSettings();
+  fireEvent.click(screen.getByRole("button", { name: "mqttConnect" }));
+  await waitFor(() => expect(socket.connect).toHaveBeenCalledTimes(1));
+  first.unmount();
+  expect(socket.end).toHaveBeenCalledWith(true);
+
+  const next = fixture();
+  const reopened = render(page);
+  await waitFor(() => expect(next.connect).toHaveBeenCalledTimes(1));
+  openSettings();
   fireEvent.click(screen.getByRole("button", { name: "mqttDisconnect" }));
-  await waitFor(() => expect(host).toBeEnabled());
-  expect(screen.getByRole("status")).toHaveTextContent("mqttDisconnected");
-  expect(host).toHaveValue("broker.example.com");
+  reopened.unmount();
+
+  vi.mocked(mqtt.connect).mockClear();
+  render(page);
+  openSettings();
+  expect(screen.getByLabelText("mqttHost")).toBeEnabled();
+  expect(mqtt.connect).not.toHaveBeenCalled();
 });

@@ -1,4 +1,4 @@
 - [x] Add per-device MQTT broker configuration and bridge connection controls.
-- [x] Add an always-on MQTT bridge with inbound sensor callbacks and scheduled dose publishing.
-- [x] Add per-box topic identifiers, persistent bridge settings, and bilingual setup labels.
-- [ ] Deploy the bridge, set Lovable Cloud secrets, and verify with the production broker and ESP32 firmware.
+- [x] Connect to the MQTT broker over WSS from the signed-in CareBee tab and publish scheduled doses while it is open.
+- [x] Add per-box topic identifiers, local browser settings, and bilingual setup labels.
+- [ ] Verify the published app with the ESP32 firmware.

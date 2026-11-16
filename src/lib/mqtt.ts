@@ -19,8 +19,7 @@ export const mqttSettingsSchema = z
       .toLowerCase()
       .max(253)
       .regex(/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/),
-    transport: z.enum(["mqtt", "ws", "mqtts", "wss"]),
-    ports: z.object({ mqtt: port, ws: port, mqtts: port, wss: port }),
+    websocketPort: port,
     websocketPath: z
       .string()
       .trim()
@@ -36,32 +35,29 @@ export const mqttSettingsSchema = z
   });
 
 export type MqttSettings = z.infer<typeof mqttSettingsSchema>;
-export type MqttTransport = MqttSettings["transport"];
 export type MqttState = "disconnected" | "connecting" | "connected";
 
-export const mqttCommandSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("status"), deviceId: z.string().uuid() }),
-  z.object({
-    action: z.literal("connect"),
-    deviceId: z.string().uuid(),
-    settings: mqttSettingsSchema,
-  }),
-  z.object({ action: z.literal("disconnect"), deviceId: z.string().uuid() }),
+const deviceKey = z.string().regex(/^smrb_[0-9a-f]{48}$/);
+export const mqttSensorSchema = z.union([
+  z.object({ device_key: deviceKey, status: z.record(z.unknown()) }).strict(),
+  z
+    .object({
+      device_key: deviceKey,
+      schedule_id: z.string().uuid(),
+      scheduled_date: z.string().date(),
+    })
+    .strict(),
 ]);
-
-export type MqttCommand = z.infer<typeof mqttCommandSchema>;
 
 export interface MqttConnection {
   settings: MqttSettings;
-  enabled: boolean;
   state: MqttState;
   failed: boolean;
 }
 
 export const mqttDefaults: MqttSettings = {
-  host: "",
-  transport: "mqtts",
-  ports: { mqtt: 1883, ws: 8083, mqtts: 8883, wss: 8084 },
+  host: "broker.hivemq.com",
+  websocketPort: 8884,
   websocketPath: "/mqtt",
   sensorTopic: "medicine/sensor",
   scheduleTopic: "medicine/schedule",
