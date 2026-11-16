@@ -46,6 +46,7 @@ export function zonedNow(timeZone: string, at = new Date()) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     weekday: "short",
     hourCycle: "h23",
   }).formatToParts(at);
@@ -55,6 +56,7 @@ export function zonedNow(timeZone: string, at = new Date()) {
     date: `${get("year")}-${get("month")}-${get("day")}`,
     weekday: weekdays.indexOf(get("weekday")),
     minutes: Number(get("hour")) * 60 + Number(get("minute")),
+    second: Number(get("second")),
   };
 }
 
@@ -66,17 +68,31 @@ export function timeToMinutes(time: string) {
 type Admin = Awaited<ReturnType<typeof authenticateDevice>> extends infer R ? (R extends { admin: infer A } ? A : never) : never;
 
 /** Today's doses for the device owner, in the owner's time zone. */
-export async function todaysDoses(admin: Admin, ownerId: string, timeZone: string) {
-  const now = zonedNow(timeZone);
-  const [{ data: meds }, { data: schedules }, { data: logs }] = await Promise.all([
+export async function todaysDoses(admin: Admin, ownerId: string, timeZone: string, at = new Date()) {
+  const now = zonedNow(timeZone, at);
+  const [medicines, scheduleRows, confirmations] = await Promise.all([
     admin.from("medicines").select("id, name, dosage, pills_per_dose, food_instruction, compartment, active").eq("owner_id", ownerId),
-    admin.from("medication_schedules").select("id, medicine_id, slot, dose_time, days_of_week, notify").eq("owner_id", ownerId),
+    admin.from("medication_schedules").select("id, medicine_id, slot, dose_time, days_of_week, notify, created_at").eq("owner_id", ownerId),
     admin.from("dose_logs").select("schedule_id, confirmed_at, source").eq("owner_id", ownerId).eq("scheduled_date", now.date),
   ]);
+  const error = medicines.error ?? scheduleRows.error ?? confirmations.error;
+  if (error) throw error;
+  const meds = medicines.data;
+  const schedules = scheduleRows.data;
+  const logs = confirmations.data;
   const medById = new Map((meds ?? []).map((m) => [m.id, m]));
   const logBySchedule = new Map((logs ?? []).map((l) => [l.schedule_id, l]));
   const doses = (schedules ?? [])
-    .filter((s) => s.days_of_week.includes(now.weekday) && medById.get(s.medicine_id)?.active)
+    .filter((s) => {
+      if (!s.days_of_week.includes(now.weekday) || !medById.get(s.medicine_id)?.active) return false;
+      const createdAt = new Date(s.created_at);
+      const created = zonedNow(timeZone, createdAt);
+      return created.date < now.date || (created.date === now.date && (
+        created.minutes < timeToMinutes(s.dose_time) || (
+          created.minutes === timeToMinutes(s.dose_time) && created.second === 0 && createdAt.getMilliseconds() === 0
+        )
+      ));
+    })
     .map((s) => {
       const m = medById.get(s.medicine_id)!;
       const log = logBySchedule.get(s.id);
@@ -101,9 +117,10 @@ export async function todaysDoses(admin: Admin, ownerId: string, timeZone: strin
 
 export async function touchDevice(admin: Admin, device: { id: string; first_contact_at: string | null }, extra: Record<string, unknown> = {}) {
   const ts = new Date().toISOString();
-  await admin
+  const { error } = await admin
     .from("devices")
     .update({ last_seen_at: ts, first_contact_at: device.first_contact_at ?? ts, ...extra })
     .eq("id", device.id);
+  if (error) throw error;
   return ts;
 }

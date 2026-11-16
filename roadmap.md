@@ -1,4 +1,4 @@
-- [ ] Add secure per-device MQTT broker configuration and bridge connection controls.
-- [ ] Add an always-on MQTT bridge service scaffold with inbound sensor callbacks and scheduled dose publishing.
-- [ ] Add per-box topic identifiers, storage rules, and bilingual setup guidance.
-- [ ] Verify UI and code; report that bridge deployment and recurring one-minute schedule require user action.
+- [x] Add per-device MQTT broker configuration and bridge connection controls.
+- [x] Add an always-on MQTT bridge with inbound sensor callbacks and scheduled dose publishing.
+- [x] Add per-box topic identifiers, persistent bridge settings, and bilingual setup labels.
+- [ ] Deploy the bridge, set Lovable Cloud secrets, and verify with the production broker and ESP32 firmware.

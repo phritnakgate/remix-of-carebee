@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { ConnectionPill, LastSeen } from "@/components/hardware-status";
 import { EmptyState, PageHeader, SimBadge } from "@/components/med-ui";
+import { MqttSetup } from "@/components/mqtt-setup";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +44,8 @@ export const Route = createFileRoute("/_authenticated/devices")({
   component: DevicesPage,
 });
 
+type DeviceCredentials = { deviceId: string; key: string };
+
 function DevicesPage() {
   const { t } = useI18n();
   const { ownerId, isOwn } = useActiveBox();
@@ -51,7 +54,7 @@ function DevicesPage() {
   const events = useDeviceEvents(ownerId);
   const now = useNow(15_000);
   const [addOpen, setAddOpen] = useState(false);
-  const [newKey, setNewKey] = useState<string | null>(null);
+  const [newKey, setNewKey] = useState<DeviceCredentials | null>(null);
   const [toRemove, setToRemove] = useState<Device | null>(null);
 
   const real = (devices.data ?? []).filter((d) => d.mode === "real");
@@ -114,7 +117,6 @@ function DevicesPage() {
             />
           ))
         )}
-        <ApiSetup />
       </section>
 
       {sims.length > 0 && (
@@ -169,7 +171,7 @@ function DeviceCard({
   events: DeviceEvent[];
   canManage: boolean;
   onRemove: () => void;
-  onNewKey?: (k: string) => void;
+  onNewKey?: (credentials: DeviceCredentials) => void;
 }) {
   const { t } = useI18n();
   const isSim = device.mode === "simulated";
@@ -236,6 +238,7 @@ function DeviceCard({
       )}
 
       {isSim && canManage && <SimulatorControls device={device} status={status} />}
+      {!isSim && canManage && <MqttSetup deviceId={device.id} ownerId={device.owner_id} />}
 
       <h4 className="mt-6 text-lg font-bold">{t("recentEvents")}</h4>
       {events.length === 0 ? (
@@ -265,7 +268,7 @@ function DeviceCard({
               onClick={async () => {
                 try {
                   const r = await rotate({ data: { deviceId: device.id } });
-                  onNewKey(r.key);
+                  onNewKey({ deviceId: device.id, key: r.key });
                 } catch (e) {
                   toast.error((e as Error).message);
                 }
@@ -388,7 +391,7 @@ function SimulatorControls({ device, status }: { device: Device; status: DeviceS
   );
 }
 
-function AddRealDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; onCreated: (k: string) => void }) {
+function AddRealDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; onCreated: (credentials: DeviceCredentials) => void }) {
   const { t } = useI18n();
   const qc = useQueryClient();
   const register = useServerFn(registerRealDevice);
@@ -408,7 +411,7 @@ function AddRealDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpe
             try {
               const r = await register({ data: { name } });
               onOpenChange(false);
-              onCreated(r.key);
+              onCreated(r);
               qc.invalidateQueries({ queryKey: ["devices"] });
             } catch (err) {
               toast.error((err as Error).message);
@@ -434,7 +437,7 @@ function AddRealDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpe
   );
 }
 
-function KeyDialog({ keyValue, onClose }: { keyValue: string | null; onClose: () => void }) {
+function KeyDialog({ keyValue, onClose }: { keyValue: DeviceCredentials | null; onClose: () => void }) {
   const { t } = useI18n();
   return (
     <Dialog open={!!keyValue} onOpenChange={(o) => !o && onClose()}>
@@ -443,12 +446,16 @@ function KeyDialog({ keyValue, onClose }: { keyValue: string | null; onClose: ()
           <DialogTitle className="text-2xl">{t("deviceKey")}</DialogTitle>
         </DialogHeader>
         <p className="rounded-2xl bg-pending-soft p-4 text-base font-semibold text-pending-foreground">{t("deviceKeyOnce")}</p>
-        <code className="block break-all rounded-2xl bg-muted p-4 font-mono text-base">{keyValue}</code>
+        <code className="block break-all rounded-2xl bg-muted p-4 font-mono text-base">{keyValue?.key}</code>
+        <div className="space-y-1">
+          <p className="font-semibold">{t("mqttBoxCode")}</p>
+          <code className="block select-all break-all text-sm text-muted-foreground">{keyValue?.deviceId}</code>
+        </div>
         <DialogFooter>
           <Button
             size="lg"
             onClick={() => {
-              if (keyValue) navigator.clipboard.writeText(keyValue);
+              if (keyValue) navigator.clipboard.writeText(keyValue.key);
               toast.success(t("copied"));
             }}
           >
@@ -457,48 +464,5 @@ function KeyDialog({ keyValue, onClose }: { keyValue: string | null; onClose: ()
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function ApiSetup() {
-  const { t } = useI18n();
-  const [origin, setOrigin] = useState("https://your-app.lovable.app");
-  useEffect(() => setOrigin(window.location.origin), []);
-  const base = `${origin}/api/public/device`;
-  const sample = `// ESP32 (Arduino) — HTTPClient
-#include <WiFi.h>
-#include <HTTPClient.h>
-const char* KEY = "smrb_...";            // device key
-const char* BASE = "${base}";
-
-void sendStatus() {
-  HTTPClient http;
-  http.begin(String(BASE) + "/status");
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("X-Device-Key", KEY);
-  http.POST("{\\"led\\":\\"on\\",\\"buzzer\\":\\"off\\",\\"compartments\\":[{\\"number\\":1,\\"open\\":false,\\"has_pills\\":true}],\\"firmware\\":\\"1.0.0\\"}");
-  http.end();
-}
-
-void confirmCompartment(int n) {
-  HTTPClient http;
-  http.begin(String(BASE) + "/confirm");
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("X-Device-Key", KEY);
-  http.POST("{\\"compartment\\":" + String(n) + "}");
-  http.end();
-}`;
-  return (
-    <details className="rounded-3xl border bg-card p-6 shadow-soft">
-      <summary className="cursor-pointer text-xl font-bold">{t("apiSetup")}</summary>
-      <p className="mt-3 text-base text-muted-foreground">{t("apiSetupBody")}</p>
-      <ul className="mt-4 space-y-2 font-mono text-sm">
-        <li className="rounded-xl bg-muted p-3"><strong>POST</strong> {base}/status</li>
-        <li className="rounded-xl bg-muted p-3"><strong>GET</strong> {base}/schedule</li>
-        <li className="rounded-xl bg-muted p-3"><strong>POST</strong> {base}/confirm</li>
-      </ul>
-      <p className="mt-3 text-sm text-muted-foreground">Header: <code>X-Device-Key: smrb_…</code></p>
-      <pre className="mt-4 overflow-x-auto rounded-2xl bg-foreground p-4 text-sm text-background">{sample}</pre>
-    </details>
   );
 }

@@ -50,6 +50,11 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const url = new URL(request.url);
+      if (url.pathname.startsWith("/api/internal/mqtt/")) {
+        const { handleMqttInternalRequest } = await import("./lib/mqtt-internal.server");
+        return await handleMqttInternalRequest(request, url);
+      }
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);
