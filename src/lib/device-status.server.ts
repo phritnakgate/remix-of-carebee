@@ -1,6 +1,16 @@
 import { z } from "zod";
 
-import { authenticateDevice, json, touchDevice } from "@/lib/device-api";
+import type { Json } from "@/integrations/supabase/types";
+import { authenticateDevice, json } from "@/lib/device-api";
+import {
+  defaultSensorTemplate,
+  isLoadCellReport,
+  nextLoadCellStatus,
+  parseSensorTemplate,
+  readLoadCellReport,
+} from "@/lib/load-cell";
+import type { DeviceStatusPayload } from "@/lib/medication";
+import { readSharedTemplate } from "@/lib/reminder-template.server";
 
 const StatusSchema = z.object({
   led: z.enum(["on", "off", "blinking"]).optional(),
@@ -26,7 +36,6 @@ export async function receiveDeviceStatus(request: Request, expectedDeviceId?: s
   if (expectedDeviceId && auth.device.id !== expectedDeviceId) {
     return json({ error: "Device key does not match the box" }, 403);
   }
-  const { device, admin } = auth;
 
   let body: unknown;
   try {
@@ -34,28 +43,119 @@ export async function receiveDeviceStatus(request: Request, expectedDeviceId?: s
   } catch {
     return json({ error: "Body must be JSON" }, 400);
   }
+  return applyStandardStatus(auth, body);
+}
+
+function applyStandardStatus(auth: DeviceAuth, body: unknown) {
   const parsed = StatusSchema.safeParse(body);
   if (!parsed.success) return json({ error: "Invalid status", issues: parsed.error.issues }, 400);
   const { firmware, ...status } = parsed.data;
-
-  const prev = (device.last_status ?? {}) as Record<string, unknown>;
-  const changed =
-    prev["led"] !== status.led ||
-    prev["buzzer"] !== status.buzzer ||
-    JSON.stringify(prev["compartments"] ?? null) !== JSON.stringify(status.compartments ?? null);
-
-  const ts = await touchDevice(admin, device, {
-    last_status: status,
-    ...(firmware ? { firmware } : {}),
+  return applyStatus(auth, (previous) => {
+    const changed =
+      previous.led !== status.led ||
+      previous.buzzer !== status.buzzer ||
+      JSON.stringify(previous.compartments ?? null) !== JSON.stringify(status.compartments ?? null);
+    return {
+      status: { ...status, ...(previous.load_cells ? { load_cells: previous.load_cells } : {}) },
+      event: changed ? status : null,
+      ...(firmware ? { firmware } : {}),
+    };
   });
-  if (changed || !device.first_contact_at) {
-    await admin.from("device_events").insert({
-      device_id: device.id,
-      owner_id: device.owner_id,
-      event_type: device.first_contact_at ? "status_changed" : "first_contact",
-      payload: status,
-      source: "real",
-    });
+}
+
+export async function receiveMqttStatus(
+  request: Request,
+  expectedDeviceId: string,
+  legacyStatus?: Record<string, unknown>,
+) {
+  const auth = await authenticateDevice(request);
+  if ("error" in auth) return auth.error;
+  if (auth.device.id !== expectedDeviceId) {
+    return json({ error: "Device key does not match the box" }, 403);
   }
-  return json({ ok: true, server_time: ts });
+
+  let template = defaultSensorTemplate;
+  try {
+    const shared = await readSharedTemplate("sensor");
+    if (shared.template) template = parseSensorTemplate(shared.template);
+  } catch {
+    // ESP32 devices can still send the standard format if the shared settings are unavailable.
+  }
+  const payload: unknown = await request.json();
+  if (!isLoadCellReport(payload, template) && legacyStatus !== undefined) {
+    return applyStandardStatus(auth, legacyStatus);
+  }
+  const reading = readLoadCellReport(payload, template);
+  if (!reading) return json({ error: "Invalid load cell report" }, 400);
+
+  const compartment = reading.compartment === null ? "box" : String(reading.compartment);
+  return applyStatus(auth, (previous) => {
+    const { status, change } = nextLoadCellStatus(
+      reading,
+      previous.load_cells?.[compartment],
+      template.thresholdGrams,
+    );
+    return {
+      status: { ...previous, load_cells: { ...previous.load_cells, [compartment]: status } },
+      event: change,
+    };
+  });
+}
+
+type DeviceAuth = Exclude<Awaited<ReturnType<typeof authenticateDevice>>, { error: Response }>;
+
+async function applyStatus(
+  { device, admin }: DeviceAuth,
+  changes: (previous: DeviceStatusPayload) => {
+    status: Json;
+    event: Json;
+    firmware?: string;
+  },
+) {
+  let snapshot: Pick<typeof device, "last_status" | "first_contact_at"> = device;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const previous = (snapshot.last_status ?? {}) as DeviceStatusPayload;
+    const { status, event, firmware } = changes(previous);
+    const ts = new Date().toISOString();
+    const write = admin
+      .from("devices")
+      .update({
+        last_status: status,
+        last_seen_at: ts,
+        first_contact_at: snapshot.first_contact_at ?? ts,
+        ...(firmware ? { firmware } : {}),
+      })
+      .eq("id", device.id)
+      .eq("mode", "real");
+
+    // MQTT can be open in multiple tabs. Merge only with the snapshot we read.
+    if (snapshot.last_status === null) write.is("last_status", null);
+    else write.filter("last_status", "eq", JSON.stringify(snapshot.last_status));
+    if (snapshot.first_contact_at === null) write.is("first_contact_at", null);
+
+    const { data: updated, error } = await write.select("id").maybeSingle();
+    if (error) return json({ error: "Could not save status" }, 500);
+    if (updated) {
+      if (event || !snapshot.first_contact_at) {
+        await admin.from("device_events").insert({
+          device_id: device.id,
+          owner_id: device.owner_id,
+          event_type: snapshot.first_contact_at ? "status_changed" : "first_contact",
+          payload: event ?? status,
+          source: "real",
+        });
+      }
+      return json({ ok: true, server_time: ts });
+    }
+
+    const { data } = await admin
+      .from("devices")
+      .select("last_status,first_contact_at")
+      .eq("id", device.id)
+      .eq("mode", "real")
+      .maybeSingle();
+    if (!data) break;
+    snapshot = data;
+  }
+  return json({ error: "Status update conflicted with another report" }, 409);
 }

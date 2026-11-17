@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { mqttSensorSchema } from "./mqtt";
+import { mqttDeviceEnvelope, mqttSensorSchema } from "./mqtt";
 
 const box = z.object({ deviceId: z.string().uuid() });
 
@@ -37,8 +37,8 @@ export const getMqttDue = createServerFn({ method: "GET" })
     let reminderTemplate = "";
     if (due.length) {
       try {
-        const { readSharedReminderTemplate } = await import("./reminder-template.server");
-        reminderTemplate = (await readSharedReminderTemplate()).template;
+        const { readSharedTemplate } = await import("./reminder-template.server");
+        reminderTemplate = (await readSharedTemplate("reminder")).template;
       } catch {
         // A template lookup failure must not block the scheduled reminder.
       }
@@ -72,17 +72,18 @@ export const forwardMqttSensor = createServerFn({ method: "POST" })
       return false;
     }
     const parsed = mqttSensorSchema.safeParse(payload);
-    if (!parsed.success) return false;
-    const { device_key, ...report } = parsed.data;
+    const envelope = mqttDeviceEnvelope.safeParse(payload);
+    if (!envelope.success) return false;
+    const report = parsed.data;
     const request = new Request("https://carebee.invalid/device", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Device-Key": device_key },
-      body: JSON.stringify("status" in report ? report.status : report),
+      headers: { "Content-Type": "application/json", "X-Device-Key": envelope.data.device_key },
+      body: data.message,
     });
-    if ("status" in report) {
-      const { receiveDeviceStatus } = await import("./device-status.server");
-      return (await receiveDeviceStatus(request, device.id)).ok;
+    if (report && "schedule_id" in report) {
+      const { confirmDeviceDose } = await import("./device-confirm.server");
+      return (await confirmDeviceDose(request, device.id)).ok;
     }
-    const { confirmDeviceDose } = await import("./device-confirm.server");
-    return (await confirmDeviceDose(request, device.id)).ok;
+    const { receiveMqttStatus } = await import("./device-status.server");
+    return (await receiveMqttStatus(request, device.id, report?.status)).ok;
   });

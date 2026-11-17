@@ -188,4 +188,5 @@ export interface DeviceStatusPayload {
   compartments?: { number: number; open?: boolean; has_pills?: boolean }[];
   wifi_rssi?: number;
   battery?: number;
+  load_cells?: Record<string, import("./load-cell").LoadCellStatus>;
 }

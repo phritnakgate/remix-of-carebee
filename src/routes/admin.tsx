@@ -4,16 +4,16 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { LangSwitch } from "@/components/lang-switch";
-import { ReminderDeveloperSettings } from "@/components/reminder-developer-settings";
+import { DeveloperTemplateEditor } from "@/components/reminder-developer-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { adminAuth, adminHeaders } from "@/lib/admin-auth";
 import {
   checkAdminAccess,
-  getAdminReminderTemplate,
+  getAdminTemplate,
   listAdminRecords,
-  saveAdminReminderTemplate,
+  saveAdminTemplate,
   updateAdminRecord,
   type AdminTable,
 } from "@/lib/admin.functions";
@@ -135,29 +135,29 @@ const tables = {
   medication_schedules: "adminSchedules",
 } as const;
 
+const sections = { reminder: "reminderTemplate", sensor: "sensorTemplate", ...tables } as const;
+
 function AdminWorkspace({ sessionId }: { sessionId: string }) {
   const { t } = useI18n();
-  const [section, setSection] = useState<AdminTable | "template">("template");
+  const [section, setSection] = useState<keyof typeof sections>("reminder");
 
   return (
     <>
       <div className="flex flex-wrap gap-1.5">
-        {(["template", ...Object.keys(tables)] as (keyof typeof tables | "template")[]).map(
-          (item) => (
-            <Button
-              key={item}
-              size="sm"
-              variant={item === section ? "default" : "outline"}
-              aria-pressed={item === section}
-              onClick={() => setSection(item)}
-            >
-              {t(item === "template" ? "reminderTemplate" : tables[item])}
-            </Button>
-          ),
-        )}
+        {(Object.keys(sections) as (keyof typeof sections)[]).map((item) => (
+          <Button
+            key={item}
+            size="sm"
+            variant={item === section ? "default" : "outline"}
+            aria-pressed={item === section}
+            onClick={() => setSection(item)}
+          >
+            {t(sections[item])}
+          </Button>
+        ))}
       </div>
-      {section === "template" ? (
-        <AdminTemplate sessionId={sessionId} />
+      {section === "reminder" || section === "sensor" ? (
+        <AdminTemplate key={section} kind={section} sessionId={sessionId} />
       ) : (
         <AdminRecords key={section} sessionId={sessionId} table={section} />
       )}
@@ -165,11 +165,11 @@ function AdminWorkspace({ sessionId }: { sessionId: string }) {
   );
 }
 
-function AdminTemplate({ sessionId }: { sessionId: string }) {
+function AdminTemplate({ sessionId, kind }: { sessionId: string; kind: "reminder" | "sensor" }) {
   const { t } = useI18n();
   const template = useQuery({
-    queryKey: ["admin-template", sessionId],
-    queryFn: async () => getAdminReminderTemplate({ headers: await sessionHeaders() }),
+    queryKey: ["admin-template", sessionId, kind],
+    queryFn: async () => getAdminTemplate({ headers: await sessionHeaders(), data: { kind } }),
     gcTime: 0,
     retry: false,
   });
@@ -178,13 +178,14 @@ function AdminTemplate({ sessionId }: { sessionId: string }) {
       {template.isPending && <p role="status">{t("loading")}</p>}
       {template.isError && <p role="alert">{t("adminLoadFailed")}</p>}
       {!template.isError && template.data && (
-        <ReminderDeveloperSettings
+        <DeveloperTemplateEditor
+          kind={kind}
           initialTemplate={template.data.template}
           available={template.data.available}
           onSave={async (value) =>
-            saveAdminReminderTemplate({
+            saveAdminTemplate({
               headers: await sessionHeaders(),
-              data: { template: value },
+              data: { kind, template: value },
             })
           }
         />

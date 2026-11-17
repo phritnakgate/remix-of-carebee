@@ -40,6 +40,7 @@ export type MqttSettings = z.infer<typeof mqttSettingsSchema>;
 export type MqttState = "disconnected" | "connecting" | "connected";
 
 const deviceKey = z.string().regex(/^smrb_[0-9a-f]{48}$/);
+export const mqttDeviceEnvelope = z.object({ device_key: deviceKey });
 export const mqttTestPayload = '{"type":"carebee_test","message":"Hello from CareBee"}';
 
 const mqttTestMessage = z.object({ type: z.literal("carebee_test"), message: z.string() }).strict();

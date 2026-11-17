@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { mqttPayloadLimit } from "./mqtt";
+import { parseSensorTemplate } from "./load-cell";
 import { profileSchema } from "./profile";
 import { reminderPreview, renderReminderTemplate } from "./reminder-template";
 
@@ -97,19 +98,26 @@ async function updateRow(request: PromiseLike<{ error: unknown }>) {
   return true;
 }
 
-export const getAdminReminderTemplate = createServerFn({ method: "POST" }).handler(async () => {
-  const { requireAdmin } = await import("./admin.server");
-  await requireAdmin();
-  const { readSharedReminderTemplate } = await import("./reminder-template.server");
-  return readSharedReminderTemplate();
-});
+const templateKind = z.object({ kind: z.enum(["reminder", "sensor"]) });
 
-export const saveAdminReminderTemplate = createServerFn({ method: "POST" })
-  .validator(z.object({ template: z.string().trim().max(mqttPayloadLimit) }))
+export const getAdminTemplate = createServerFn({ method: "POST" })
+  .validator(templateKind)
   .handler(async ({ data }) => {
     const { requireAdmin } = await import("./admin.server");
     await requireAdmin();
-    if (data.template) renderReminderTemplate(data.template, reminderPreview);
-    const { writeSharedReminderTemplate } = await import("./reminder-template.server");
-    return writeSharedReminderTemplate(data.template);
+    const { readSharedTemplate } = await import("./reminder-template.server");
+    return readSharedTemplate(data.kind);
+  });
+
+export const saveAdminTemplate = createServerFn({ method: "POST" })
+  .validator(templateKind.extend({ template: z.string().trim().max(mqttPayloadLimit) }))
+  .handler(async ({ data }) => {
+    const { requireAdmin } = await import("./admin.server");
+    await requireAdmin();
+    if (data.template) {
+      if (data.kind === "sensor") parseSensorTemplate(data.template);
+      else renderReminderTemplate(data.template, reminderPreview);
+    }
+    const { writeSharedTemplate } = await import("./reminder-template.server");
+    return writeSharedTemplate(data.kind, data.template);
   });

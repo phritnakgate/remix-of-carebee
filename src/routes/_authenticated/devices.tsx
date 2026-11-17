@@ -180,6 +180,12 @@ function DeviceCard({
   const { testContacts } = useMqttSession();
   const tested = conn === "awaiting_first_contact" && testContacts[device.id] === true;
   const status = (device.last_status ?? {}) as DeviceStatusPayload;
+  const loadCells = isSim ? undefined : status.load_cells;
+  const boxWeight = loadCells?.["box"];
+  const compartments = new Set([
+    ...(status.compartments ?? []).map(({ number }) => number),
+    ...Object.keys(loadCells ?? {}).filter((key) => key !== "box").map(Number),
+  ]);
   const hasStatus = isSim || !!device.first_contact_at;
   const rotate = useServerFn(rotateDeviceKey);
 
@@ -216,22 +222,38 @@ function DeviceCard({
             <Indicator icon={<Wifi />} label={t("wifi")} value={status.wifi_rssi != null ? `${status.wifi_rssi} dBm` : "—"} />
             <Indicator icon={<BatteryMedium />} label={t("battery")} value={status.battery != null ? `${status.battery}%` : "—"} />
           </div>
+          {boxWeight && (
+            <div className="mt-2 rounded-xl border p-2.5 text-sm">
+              <LoadCellReading cell={boxWeight} />
+            </div>
+          )}
           <h4 className="mt-4 text-base font-bold">{t("compartments")}</h4>
-          {status.compartments?.length ? (
-            <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-8">
-              {status.compartments.map((c) => (
-                <div
-                  key={c.number}
-                  className={cn(
-                    "flex flex-col items-center rounded-2xl border-2 p-3 text-center",
-                    c.open ? "border-pending bg-pending-soft" : "border-border bg-card",
-                  )}
-                >
-                  <span className="text-xl font-bold">#{c.number}</span>
-                  <span className="text-sm font-semibold">{c.open ? t("open") : t("closed")}</span>
-                  {c.has_pills != null && <span className="text-xs text-muted-foreground">{c.has_pills ? t("hasPills") : t("empty")}</span>}
-                </div>
-              ))}
+          {compartments.size ? (
+            <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+              {[...compartments].sort((a, b) => a - b).map((number) => {
+                const c = status.compartments?.find((item) => item.number === number);
+                const cell = loadCells?.[String(number)];
+                return (
+                  <div
+                    key={number}
+                    className={cn(
+                      "flex flex-col items-center rounded-xl border p-2.5 text-center",
+                      c?.open ? "border-pending bg-pending-soft" : "border-border bg-card",
+                    )}
+                  >
+                    <span className="text-base font-bold">#{number}</span>
+                    {c?.open != null && (
+                      <span className="text-sm font-semibold">{t(c.open ? "open" : "closed")}</span>
+                    )}
+                    {c?.has_pills != null && (
+                      <span className="text-xs text-muted-foreground">
+                        {t(c.has_pills ? "hasPills" : "empty")}
+                      </span>
+                    )}
+                    {cell && <LoadCellReading cell={cell} />}
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <p className="mt-2 text-base text-muted-foreground">—</p>
@@ -253,7 +275,7 @@ function DeviceCard({
           {events.slice(0, 8).map((e) => (
             <li key={e.id} className="flex items-center justify-between gap-3 px-4 py-3 text-base">
               <span className="font-semibold">
-                {e.event_type.replace(/_/g, " ")}
+                <DeviceEventLabel event={e} />
                 {typeof (e.payload as Record<string, Json>)?.["medicine"] === "string" && ` · ${(e.payload as Record<string, string>)["medicine"]}`}
               </span>
               <span className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -289,6 +311,45 @@ function DeviceCard({
       )}
     </article>
   );
+}
+
+function LoadCellReading({ cell }: { cell: NonNullable<DeviceStatusPayload["load_cells"]>[string] }) {
+  const { t } = useI18n();
+  return (
+    <>
+      <span className="text-xs tabular-nums">
+        {t("loadCellWeight")} {cell.weight_g.toLocaleString()} {t("weightGrams")}
+      </span>
+      {cell.last_change && (
+        <span className="block text-xs font-semibold text-muted-foreground">
+          {t(cell.last_change === "decreased" ? "loadCellDecrease" : "loadCellIncrease")}
+        </span>
+      )}
+    </>
+  );
+}
+
+function DeviceEventLabel({ event }: { event: DeviceEvent }) {
+  const { t } = useI18n();
+  const payload = event.payload;
+  if (
+    event.source === "real" &&
+    event.event_type === "status_changed" &&
+    payload &&
+    typeof payload === "object" &&
+    !Array.isArray(payload) &&
+    (typeof payload["compartment"] === "number" || payload["compartment"] === null) &&
+    typeof payload["delta_g"] === "number"
+  ) {
+    const delta = payload["delta_g"];
+    const channel = payload["compartment"];
+    return (
+      <>
+        {t("loadCellChange")}{channel !== null && ` #${channel}`} · {delta > 0 ? "+" : ""}{delta.toLocaleString()} {t("weightGrams")}
+      </>
+    );
+  }
+  return event.event_type.replace(/_/g, " ");
 }
 
 function Indicator({ icon, label, value, on }: { icon: ReactNode; label: string; value: string; on?: boolean }) {
