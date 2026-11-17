@@ -32,8 +32,8 @@ const update = z.discriminatedUnion("table", [
 ]);
 
 export const checkAdminAccess = createServerFn({ method: "POST" }).handler(async () => {
-  const { hasAdminAccess } = await import("./admin.server");
-  return hasAdminAccess();
+  const { checkAdminHttpAccess } = await import("./admin.server");
+  return checkAdminHttpAccess();
 });
 
 export const listAdminRecords = createServerFn({ method: "POST" })

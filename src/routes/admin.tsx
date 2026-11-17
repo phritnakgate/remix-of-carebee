@@ -31,11 +31,18 @@ async function sessionHeaders() {
   return adminHeaders(data.session.access_token);
 }
 
+const adminAccessError = {
+  invalid_session: "adminSessionFailed",
+  password_required: "adminPasswordRequired",
+  forbidden: "adminAccessDenied",
+  unavailable: "adminAccessUnavailable",
+} as const;
+
 function AdminPage() {
   const { t } = useI18n();
   const [sessionId, setSessionId] = useState("");
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<keyof typeof adminAccessError | "credentials" | null>(null);
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,20 +50,27 @@ function AdminPage() {
     const fields = new FormData(event.currentTarget);
     let auth: ReturnType<typeof adminAuth> | undefined;
     setPending(true);
-    setError(false);
+    setError(null);
     try {
       auth = adminAuth();
-      const { data } = await auth.signInWithPassword({
+      const { data, error: signInError } = await auth.signInWithPassword({
         email: String(fields.get("email")).trim(),
         password: String(fields.get("password")),
       });
-      if (!data.session) throw new Error("Sign-in failed");
-      if (!(await checkAdminAccess({ headers: adminHeaders(data.session.access_token) }))) {
-        throw new Error("Admin access required");
+      if (signInError || !data.session) {
+        const status = signInError?.status;
+        setError(signInError && (!status || status >= 500) ? "unavailable" : "credentials");
+        return;
+      }
+      const access = await checkAdminAccess({ headers: adminHeaders(data.session.access_token) });
+      if (access !== "allowed") {
+        setError(access);
+        await auth.signOut({ scope: "local" }).catch(() => {});
+        return;
       }
       setSessionId(crypto.randomUUID());
     } catch {
-      setError(true);
+      setError("unavailable");
       await auth?.signOut({ scope: "local" }).catch(() => {});
     } finally {
       setPending(false);
@@ -116,7 +130,7 @@ function AdminPage() {
           </div>
           {error && (
             <p role="alert" className="text-sm text-destructive">
-              {t("adminSignInFailed")}
+              {t(error === "credentials" ? "adminSignInFailed" : adminAccessError[error])}
             </p>
           )}
           <Button type="submit" disabled={pending}>

@@ -1,32 +1,53 @@
-import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
+import { getRequest, setResponseHeader, setResponseStatus } from "@tanstack/react-start/server";
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { AdminTable } from "./admin.functions";
 
 const pageSize = 20;
 
-export async function hasAdminAccess() {
+export async function adminAccessStatus() {
   setResponseHeader("cache-control", "no-store");
   const token = getRequest().headers.get("X-CareBee-Admin-Token");
-  const allowedIds = (process.env["CAREBEE_ADMIN_USER_IDS"] ?? "")
-    .split(",")
-    .map((id) => id.trim());
-  if (!token || token.length > 8192 || !allowedIds.some(Boolean)) return false;
+  if (!token || token.length > 8192) return "invalid_session";
 
-  const { data, error } = await supabaseAdmin.auth.getClaims(token);
-  const claims = data?.claims;
-  return Boolean(
-    !error &&
-    claims?.sub &&
-    allowedIds.includes(claims.sub) &&
-    claims.amr?.some((entry) =>
-      typeof entry === "string" ? entry === "password" : entry.method === "password",
-    ),
-  );
+  try {
+    const { data, error } = await supabaseAdmin.auth.getClaims(token);
+    if (error && (error.status ?? 0) >= 500) return "unavailable";
+    const claims = data?.claims;
+    if (error || !claims?.sub) return "invalid_session";
+    if (
+      !Array.isArray(claims.amr) ||
+      !claims.amr.some((entry) =>
+        typeof entry === "string" ? entry === "password" : entry?.method === "password",
+      )
+    )
+      return "password_required";
+
+    const allowedIds = (process.env["CAREBEE_ADMIN_USER_IDS"] ?? "")
+      .split(",")
+      .map((id) => id.trim().toLowerCase());
+    if (allowedIds.includes(claims.sub.toLowerCase())) return "allowed";
+
+    // Check the current account so revoking app_metadata takes effect on the next request.
+    const account = await supabaseAdmin.auth.getUser(token);
+    if (account.error && (account.error.status ?? 0) >= 500) return "unavailable";
+    if (account.error || account.data.user?.id !== claims.sub) return "invalid_session";
+    return account.data.user.app_metadata["carebee_admin"] === true ? "allowed" : "forbidden";
+  } catch {
+    return "unavailable";
+  }
 }
 
 export async function requireAdmin() {
-  if (!(await hasAdminAccess())) throw new Error("Admin access required");
+  if ((await adminAccessStatus()) !== "allowed") throw new Error("Admin access required");
+}
+
+export async function checkAdminHttpAccess() {
+  const result = await adminAccessStatus();
+  if (result === "invalid_session") setResponseStatus(401);
+  if (result === "password_required" || result === "forbidden") setResponseStatus(403);
+  if (result === "unavailable") setResponseStatus(503);
+  return result;
 }
 
 const records = {
