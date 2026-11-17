@@ -1,5 +1,13 @@
 {
   "version": "7",
   "dialect": "postgresql",
-  "entries": []
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1794926165710,
+      "tag": "0000_enable_seven_box_medicine_rounds",
+      "breakpoints": true
+    }
+  ]
 }

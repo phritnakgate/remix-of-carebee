@@ -231,9 +231,11 @@ export type Database = {
       }
       medication_schedules: {
         Row: {
+          box_slot: string | null
           created_at: string
           days_of_week: number[]
           dose_time: string
+          ends_on: string | null
           id: string
           medicine_id: string
           notify: boolean
@@ -241,9 +243,11 @@ export type Database = {
           slot: Database["public"]["Enums"]["time_slot"]
         }
         Insert: {
+          box_slot?: string | null
           created_at?: string
           days_of_week?: number[]
           dose_time: string
+          ends_on?: string | null
           id?: string
           medicine_id: string
           notify?: boolean
@@ -251,9 +255,11 @@ export type Database = {
           slot: Database["public"]["Enums"]["time_slot"]
         }
         Update: {
+          box_slot?: string | null
           created_at?: string
           days_of_week?: number[]
           dose_time?: string
+          ends_on?: string | null
           id?: string
           medicine_id?: string
           notify?: boolean
@@ -276,6 +282,7 @@ export type Database = {
           color: string
           compartment: number | null
           created_at: string
+          device_id: string | null
           dosage: string | null
           food_instruction: Database["public"]["Enums"]["food_instruction"]
           id: string
@@ -291,6 +298,7 @@ export type Database = {
           color?: string
           compartment?: number | null
           created_at?: string
+          device_id?: string | null
           dosage?: string | null
           food_instruction?: Database["public"]["Enums"]["food_instruction"]
           id?: string
@@ -306,6 +314,7 @@ export type Database = {
           color?: string
           compartment?: number | null
           created_at?: string
+          device_id?: string | null
           dosage?: string | null
           food_instruction?: Database["public"]["Enums"]["food_instruction"]
           id?: string
@@ -316,7 +325,15 @@ export type Database = {
           quantity?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "medicines_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -357,8 +374,13 @@ export type Database = {
     }
     Functions: {
       accept_caregiver_invite: { Args: { _code: string }; Returns: string }
+      box_schedule_version: { Args: never; Returns: number }
       can_access: { Args: { _owner: string }; Returns: boolean }
       is_linked: { Args: { _other: string }; Returns: boolean }
+      save_box_medicine: {
+        Args: { _medicine: Json; _medicine_id: string; _rounds: Json }
+        Returns: string
+      }
     }
     Enums: {
       device_mode: "real" | "simulated"
