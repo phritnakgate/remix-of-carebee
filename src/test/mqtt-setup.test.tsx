@@ -3,10 +3,14 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { beforeEach, expect, it, vi } from "vitest";
 import mqtt from "mqtt";
 
+import { ConnectionPill } from "@/components/hardware-status";
 import { MqttSetup } from "@/components/mqtt-setup";
 import { mqttTestPayload } from "@/lib/mqtt";
 import { getMqttDue, forwardMqttSensor } from "@/lib/mqtt.functions";
-import { MqttSessionProvider } from "@/lib/mqtt-session";
+import { MqttSessionProvider, useMqttSession } from "@/lib/mqtt-session";
+
+const { queryClient } = vi.hoisted(() => ({ queryClient: { invalidateQueries: vi.fn() } }));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => queryClient }));
 
 vi.mock("@tanstack/react-start", () => ({
   createClientOnlyFn: (fn: unknown) => fn,
@@ -61,8 +65,21 @@ function fixture() {
   return socket;
 }
 
+function TestDevicePage() {
+  const { testContacts } = useMqttSession();
+  return (
+    <>
+      <ConnectionPill
+        conn="awaiting_first_contact"
+        testReceived={testContacts[deviceId] === true}
+      />
+      <MqttSetup deviceId={deviceId} ownerId="owner" />
+    </>
+  );
+}
+
 function setupPage() {
-  return <MqttSetup deviceId={deviceId} ownerId="owner" />;
+  return <TestDevicePage />;
 }
 
 function openSettings() {
@@ -260,7 +277,10 @@ it("sends a manual payload to the configured outgoing topic and displays the inc
   expect(incoming.getByText("mqttTestMessage")).toBeInTheDocument();
   expect(incoming.getByText("mqttMessageReceived")).toBeInTheDocument();
   expect(incoming.getByText(/Hello from CareBee/)).toBeInTheDocument();
+  expect(screen.getByText("hwMqttTestReceived")).toBeInTheDocument();
+  expect(screen.queryByText("hwAwaiting")).not.toBeInTheDocument();
   expect(forwardMqttSensor).not.toHaveBeenCalled();
+  expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
 
   let finishReport = (_accepted: boolean) => {};
   vi.mocked(forwardMqttSensor).mockReturnValue(
@@ -278,6 +298,10 @@ it("sends a manual payload to the configured outgoing topic and displays the inc
     finishReport(true);
   });
   expect(incoming.getByText("mqttMessageProcessed")).toBeInTheDocument();
+  expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["devices", "owner"] });
+  expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+    queryKey: ["device_events", "owner"],
+  });
 });
 
 it("keeps MQTT on another CareBee page, sends the due dose once, and closes on page hide", async () => {

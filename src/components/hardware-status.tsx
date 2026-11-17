@@ -5,15 +5,18 @@ import { Link } from "@tanstack/react-router";
 import { SimBadge, useDateFns } from "@/components/med-ui";
 import { useI18n } from "@/lib/i18n";
 import { deviceConnection, type Device, type DeviceConnection } from "@/lib/medication";
+import { useMqttSession } from "@/lib/mqtt-session";
 import { cn } from "@/lib/utils";
 
-export function ConnectionPill({ conn }: { conn: DeviceConnection }) {
+export function ConnectionPill({ conn, testReceived }: { conn: DeviceConnection; testReceived?: boolean }) {
   const { t } = useI18n();
   if (conn === "simulated") return <SimBadge />;
   const map = {
     online: { label: t("hwOnline"), cls: "bg-taken-soft text-taken-foreground", Icon: Wifi },
     offline: { label: t("hwOffline"), cls: "bg-missed-soft text-missed-foreground", Icon: WifiOff },
-    awaiting_first_contact: { label: t("hwAwaiting"), cls: "bg-pending-soft text-pending-foreground", Icon: Hourglass },
+    awaiting_first_contact: testReceived
+      ? { label: t("hwMqttTestReceived"), cls: "bg-secondary text-secondary-foreground", Icon: Wifi }
+      : { label: t("hwAwaiting"), cls: "bg-pending-soft text-pending-foreground", Icon: Hourglass },
   }[conn];
   return (
     <span className={cn("inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold", map.cls)}>
@@ -37,6 +40,7 @@ export function LastSeen({ device }: { device: Device }) {
 /** Dashboard summary. Real and simulated boxes are always shown separately. */
 export function HardwareSummary({ devices, now }: { devices: Device[]; now: Date }) {
   const { t } = useI18n();
+  const { testContacts } = useMqttSession();
   const real = devices.filter((d) => d.mode === "real");
   const sims = devices.filter((d) => d.mode === "simulated");
   return (
@@ -63,9 +67,9 @@ export function HardwareSummary({ devices, now }: { devices: Device[]; now: Date
             <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-muted p-4">
               <div>
                 <p className="text-lg font-semibold">{d.name}</p>
-                <LastSeen device={d} />
+                {(!testContacts[d.id] || d.first_contact_at) && <LastSeen device={d} />}
               </div>
-              <ConnectionPill conn={deviceConnection(d, now)} />
+              <ConnectionPill conn={deviceConnection(d, now)} testReceived={testContacts[d.id] === true} />
             </li>
           ))}
         </ul>

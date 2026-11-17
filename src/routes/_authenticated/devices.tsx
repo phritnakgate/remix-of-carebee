@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { ConnectionPill, LastSeen } from "@/components/hardware-status";
 import { EmptyState, PageHeader, SimBadge } from "@/components/med-ui";
 import { MqttSetup } from "@/components/mqtt-setup";
+import { useMqttSession } from "@/lib/mqtt-session";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -176,6 +177,8 @@ function DeviceCard({
   const { t } = useI18n();
   const isSim = device.mode === "simulated";
   const conn = deviceConnection(device, now);
+  const { testContacts } = useMqttSession();
+  const tested = conn === "awaiting_first_contact" && testContacts[device.id] === true;
   const status = (device.last_status ?? {}) as DeviceStatusPayload;
   const hasStatus = isSim || !!device.first_contact_at;
   const rotate = useServerFn(rotateDeviceKey);
@@ -189,18 +192,20 @@ function DeviceCard({
             <p className="text-base font-semibold text-sim-foreground">{t("simulatedNote")}</p>
           ) : (
             <div className="flex flex-wrap gap-x-4 text-sm text-muted-foreground">
-              <LastSeen device={device} />
+              {!tested && <LastSeen device={device} />}
               {device.key_prefix && <span>{t("deviceKey")}: {device.key_prefix}…</span>}
             </div>
           )}
         </div>
         <div className="flex items-center gap-2">
-          {isSim ? <SimBadge /> : <ConnectionPill conn={conn} />}
+          {isSim ? <SimBadge /> : <ConnectionPill conn={conn} testReceived={tested} />}
         </div>
       </div>
 
       {conn === "awaiting_first_contact" && (
-        <p className="mt-4 rounded-2xl bg-pending-soft p-4 text-base text-pending-foreground">{t("hwAwaitingBody")}</p>
+        <p className={cn("mt-4 rounded-2xl p-4 text-base", tested ? "bg-secondary text-secondary-foreground" : "bg-pending-soft text-pending-foreground")}>
+          {t(tested ? "hwMqttTestReceivedBody" : "hwAwaitingBody")}
+        </p>
       )}
 
       {hasStatus ? (

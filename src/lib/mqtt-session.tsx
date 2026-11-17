@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { createClientOnlyFn, useServerFn } from "@tanstack/react-start";
 import type { MqttClient } from "mqtt";
 import {
@@ -78,6 +79,7 @@ interface Session {
 
 interface SessionContext {
   connections: Partial<Record<string, MqttConnection>>;
+  testContacts: Partial<Record<string, true>>;
   traffic: Partial<Record<string, MqttTraffic>>;
   clearTraffic: (deviceId: string) => void;
   publishTest: (deviceId: string, payload: string) => Promise<boolean>;
@@ -97,11 +99,13 @@ export function useMqttSession() {
 
 export function MqttSessionProvider({ userId, children }: { userId: string; children: ReactNode }) {
   const [connections, setConnections] = useState<SessionContext["connections"]>({});
+  const [testContacts, setTestContacts] = useState<SessionContext["testContacts"]>({});
   const [traffic, setTraffic] = useState<SessionContext["traffic"]>({});
   const nextMessageId = useRef(0);
   const sessions = useRef(new Map<string, Session>());
   const restored = useRef(new Set<string>());
   const devices = useDevices(userId).data;
+  const queryClient = useQueryClient();
   const getDue = useServerFn(getMqttDue);
   const forward = useServerFn(forwardMqttSensor);
 
@@ -126,6 +130,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
       closeAll();
       setConnections({});
       setTraffic({});
+      setTestContacts({});
     };
     const onStorage = (event: StorageEvent) => {
       if (!event.key?.startsWith(storagePrefix)) return;
@@ -385,7 +390,14 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
                     : "received",
               test,
             );
-            if (packet.retain || oversize || test || queueFull) return;
+            if (packet.retain || oversize) return;
+            if (test) {
+              setTestContacts((previous) =>
+                previous[deviceId] ? previous : { ...previous, [deviceId]: true },
+              );
+              return;
+            }
+            if (queueFull) return;
             queuedReports += 1;
             // Preserve sensor ordering without holding up MQTT acknowledgements or keepalives.
             incoming = incoming.then(async () => {
@@ -397,6 +409,10 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
                 const signal = AbortSignal.any([requests.signal, AbortSignal.timeout(8000)]);
                 const accepted = await forward({ data: { deviceId, message }, signal });
                 markReceived(accepted ? "processed" : "notProcessed");
+                if (accepted) {
+                  void queryClient.invalidateQueries({ queryKey: ["devices", userId] });
+                  void queryClient.invalidateQueries({ queryKey: ["device_events", userId] });
+                }
               } catch {
                 markReceived("notProcessed");
               } finally {
@@ -438,7 +454,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
       });
       void open();
     },
-    [disconnect, forward, getDue, recordTraffic],
+    [disconnect, forward, getDue, queryClient, recordTraffic, userId],
   );
 
   useEffect(() => {
@@ -458,7 +474,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
 
   return (
     <Context.Provider
-      value={{ connections, traffic, clearTraffic, publishTest, connect, disconnect }}
+      value={{ connections, testContacts, traffic, clearTraffic, publishTest, connect, disconnect }}
     >
       {children}
     </Context.Provider>
