@@ -6,6 +6,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { LangSwitch } from "@/components/lang-switch";
+import { ReminderDeveloperSettings } from "@/components/reminder-developer-settings";
 import { PageHeader } from "@/components/med-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,6 +97,8 @@ function SettingsPage() {
   return (
     <div className="space-y-8">
       <PageHeader title={t("settings")} />
+
+      <ReminderDeveloperSettings userId={userId} />
 
       <section className="rounded-3xl border bg-card p-6 shadow-soft">
         <h2 className="text-xl font-bold">{t("profile")}</h2>

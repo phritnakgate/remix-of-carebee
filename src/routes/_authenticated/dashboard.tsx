@@ -7,8 +7,8 @@ import { DoseCard, EmptyState, StatTile, fmtTime, useLongDate } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useActiveBox } from "@/lib/active-box";
-import { useI18n, type DictKey } from "@/lib/i18n";
-import { summarize, toDateKey } from "@/lib/medication";
+import { useI18n } from "@/lib/i18n";
+import { scheduleFood, scheduleSlotLabel, summarize, toDateKey } from "@/lib/medication";
 import { useConfirmDose, useDevices, useDoses, useNow, useUndoDose } from "@/lib/queries";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -31,6 +31,7 @@ function Dashboard() {
   const today = toDateKey(now);
   const { doses, isLoading } = useDoses([ownerId], [today], now);
   const devices = useDevices(ownerId);
+  const boxNames = new Map((devices.data ?? []).filter((d) => d.mode === "real").map((d) => [d.id, d.name]));
   const confirm = useConfirmDose();
   const undo = useUndoDose();
   const s = summarize(doses);
@@ -42,7 +43,7 @@ function Dashboard() {
 
   return (
     <div className="space-y-8">
-      <section className="overflow-hidden rounded-3xl bg-hero p-6 shadow-soft sm:p-8">
+      <section className="overflow-hidden rounded-3xl bg-hero p-4 shadow-soft sm:p-6">
         <p className="text-lg font-semibold text-muted-foreground">{longDate(now)}</p>
         <h1 className="mt-1 text-3xl font-bold sm:text-4xl">
           {greeting}
@@ -50,13 +51,14 @@ function Dashboard() {
         </h1>
         {next ? (
           <div className="mt-6 flex flex-wrap items-center gap-4 rounded-2xl bg-card/80 p-5">
-            <div className="text-5xl font-bold tabular-nums text-primary">{fmtTime(next.schedule.dose_time)}</div>
+            <div className="text-3xl font-bold tabular-nums text-primary sm:text-4xl">{fmtTime(next.schedule.dose_time)}</div>
             <div>
               <p className="text-base font-semibold text-muted-foreground">{t("nextDose")}</p>
               <p className="text-2xl font-bold">
                 {next.medicine.name}{" "}
                 <span className="text-lg font-medium text-muted-foreground">
-                  · {t(`food_${next.medicine.food_instruction}` as DictKey)}
+                  · {t(next.schedule.box_slot ? scheduleSlotLabel(next.schedule) : `food_${scheduleFood(next.schedule, next.medicine)}`)}
+                  {next.medicine.device_id && boxNames.has(next.medicine.device_id) ? ` · ${boxNames.get(next.medicine.device_id)}` : ""}
                 </span>
               </p>
             </div>
@@ -109,6 +111,7 @@ function Dashboard() {
                 <DoseCard
                   key={d.key}
                   dose={d}
+                  boxName={d.medicine.device_id ? boxNames.get(d.medicine.device_id) : undefined}
                   busy={confirm.isPending || undo.isPending}
                   onTake={() =>
                     confirm.mutate(

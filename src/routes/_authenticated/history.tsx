@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActiveBox } from "@/lib/active-box";
 import { useI18n, type DictKey } from "@/lib/i18n";
-import { lastNDates, scheduledDate, summarize, toDateKey } from "@/lib/medication";
+import { lastNDates, scheduleSlotLabel, scheduledDate, summarize, toDateKey } from "@/lib/medication";
 import { useDoses, useNow } from "@/lib/queries";
 
 export const Route = createFileRoute("/_authenticated/history")({
@@ -157,7 +157,7 @@ function Weekly() {
                 <td className="p-4 whitespace-nowrap">{format(d.scheduledAt, "EEE d MMM", { locale })}</td>
                 <td className="p-4 font-semibold">{d.medicine.name}</td>
                 <td className="p-4 tabular-nums">
-                  {fmtTime(d.schedule.dose_time)} <span className="text-muted-foreground">· {t(`slot_${d.schedule.slot}` as DictKey)}</span>
+                  {fmtTime(d.schedule.dose_time)} <span className="text-muted-foreground">· {t(scheduleSlotLabel(d.schedule))}</span>
                 </td>
                 <td className="p-4 tabular-nums">{d.log ? format(new Date(d.log.confirmed_at), "HH:mm") : "—"}</td>
                 <td className="p-4">

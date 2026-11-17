@@ -30,7 +30,7 @@ export const getMqttDue = createServerFn({ method: "GET" })
     const timezone = profile?.timezone || "Asia/Bangkok";
     const { timeToMinutes, todaysDoses } = await import("./device-api");
     const at = new Date();
-    const { now, doses } = await todaysDoses(supabase, userId, timezone, at);
+    const { now, doses } = await todaysDoses(supabase, userId, timezone, device.id, at);
     return {
       date: now.date,
       timezone,

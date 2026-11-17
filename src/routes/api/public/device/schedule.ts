@@ -21,7 +21,7 @@ export const Route = createFileRoute("/api/public/device/schedule")({
             source: "real",
           });
         }
-        const { now, doses } = await todaysDoses(admin, device.owner_id, timezone);
+        const { now, doses } = await todaysDoses(admin, device.owner_id, timezone, device.id);
         return json({
           server_time: ts,
           timezone,

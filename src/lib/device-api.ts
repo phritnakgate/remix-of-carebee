@@ -1,5 +1,6 @@
 // Helpers for the public ESP32 endpoints. Only call from server route handlers.
 import { hashDeviceKey } from "./device-keys";
+import { doseTargetsBox, scheduleCompartment, scheduleFood, type Medicine, type Schedule } from "./medication";
 
 export const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -68,23 +69,25 @@ export function timeToMinutes(time: string) {
 type Admin = Awaited<ReturnType<typeof authenticateDevice>> extends infer R ? (R extends { admin: infer A } ? A : never) : never;
 
 /** Today's doses for the device owner, in the owner's time zone. */
-export async function todaysDoses(admin: Admin, ownerId: string, timeZone: string, at = new Date()) {
+export async function todaysDoses(admin: Admin, ownerId: string, timeZone: string, deviceId: string, at = new Date()) {
   const now = zonedNow(timeZone, at);
   const [medicines, scheduleRows, confirmations] = await Promise.all([
-    admin.from("medicines").select("id, name, dosage, pills_per_dose, food_instruction, compartment, active").eq("owner_id", ownerId),
-    admin.from("medication_schedules").select("id, medicine_id, slot, dose_time, days_of_week, notify, created_at").eq("owner_id", ownerId),
+    admin.from("medicines").select("*").eq("owner_id", ownerId),
+    admin.from("medication_schedules").select("*").eq("owner_id", ownerId),
     admin.from("dose_logs").select("schedule_id, confirmed_at, source").eq("owner_id", ownerId).eq("scheduled_date", now.date),
   ]);
   const error = medicines.error ?? scheduleRows.error ?? confirmations.error;
   if (error) throw error;
-  const meds = medicines.data;
-  const schedules = scheduleRows.data;
+  const meds: Medicine[] | null = medicines.data;
+  const schedules: Schedule[] | null = scheduleRows.data;
   const logs = confirmations.data;
   const medById = new Map((meds ?? []).map((m) => [m.id, m]));
   const logBySchedule = new Map((logs ?? []).map((l) => [l.schedule_id, l]));
   const doses = (schedules ?? [])
     .filter((s) => {
-      if (!s.days_of_week.includes(now.weekday) || !medById.get(s.medicine_id)?.active) return false;
+      if (s.ends_on && now.date >= s.ends_on) return false;
+      const medicine = medById.get(s.medicine_id);
+      if (!s.days_of_week.includes(now.weekday) || !medicine?.active || !doseTargetsBox(s, medicine, deviceId)) return false;
       const createdAt = new Date(s.created_at);
       const created = zonedNow(timeZone, createdAt);
       return created.date < now.date || (created.date === now.date && (
@@ -102,8 +105,9 @@ export async function todaysDoses(admin: Admin, ownerId: string, timeZone: strin
         medicine: m.name,
         dosage: m.dosage,
         pills: m.pills_per_dose,
-        food_instruction: m.food_instruction,
-        compartment: m.compartment,
+        food_instruction: scheduleFood(s, m),
+        compartment: scheduleCompartment(s, m),
+        ...((s.box_slot || m.device_id) ? { box_slot: s.box_slot ?? null, device_id: m.device_id ?? null } : {}),
         slot: s.slot,
         time: s.dose_time.slice(0, 5),
         reminder: s.notify,

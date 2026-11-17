@@ -330,7 +330,7 @@ function SimulatorControls({ device, status }: { device: Device; status: DeviceS
   }
 
   async function simulateTaken() {
-    const next = doses.find((d) => d.status !== "taken");
+    const next = doses.find((d) => d.status !== "taken" && !d.medicine.device_id && !d.schedule.box_slot);
     if (!next) {
       toast.info(t("simNothingDue"));
       return;

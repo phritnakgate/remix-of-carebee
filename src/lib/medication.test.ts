@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   deviceConnection,
   doseStatus,
+  doseTargetsBox,
   expandDoses,
   isDueNow,
+  scheduleCompartment,
+  scheduleFood,
   type Medicine,
   type Schedule,
   type DoseLog,
@@ -69,6 +72,26 @@ describe("schedule expansion", () => {
       now: at(12),
     });
     expect(doses[0]?.status).toBe("taken");
+  });
+
+  it("keeps recorded doses when a round is retired without adding new pending doses", () => {
+    const retired = { ...base, ends_on: "2026-11-12" };
+    const args = { dates: ["2026-11-12"], schedules: [retired], medicines: [med], now: at(12) };
+    expect(expandDoses({ ...args, logs: [] })).toHaveLength(0);
+    const log = { schedule_id: "s1", scheduled_date: "2026-11-12" } as DoseLog;
+    expect(expandDoses({ ...args, logs: [log] })[0]?.status).toBe("taken");
+  });
+
+  it("routes the same medicine's two evening rounds to different compartments of its one box", () => {
+    const medicine = { ...med, device_id: "box-1", compartment: 2 };
+    const before = { ...base, box_slot: "evening_before" } as const;
+    const after = { ...base, box_slot: "evening_after" } as const;
+    expect(doseTargetsBox(before, medicine, "box-1")).toBe(true);
+    expect(doseTargetsBox(after, medicine, "box-2")).toBe(false);
+    expect(doseTargetsBox(after, { ...medicine, device_id: null }, "box-2")).toBe(false);
+    expect(doseTargetsBox(base, med, "box-2")).toBe(true);
+    expect([scheduleCompartment(before, medicine), scheduleCompartment(after, medicine)]).toEqual([5, 6]);
+    expect([scheduleFood(before, medicine), scheduleFood(after, medicine)]).toEqual(["before_food", "after_food"]);
   });
 });
 

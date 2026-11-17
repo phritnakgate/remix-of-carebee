@@ -100,9 +100,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   useLiveUpdates([ownerId]);
 
   return (
-    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[18rem_1fr]">
+    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen flex-col gap-6 border-r bg-sidebar p-5 lg:flex">
+      <aside className="sticky top-0 hidden h-screen flex-col gap-4 border-r bg-sidebar p-4 lg:flex">
         <Link to="/dashboard" className="flex items-center gap-3 px-2">
           <span className="grid size-12 place-items-center rounded-2xl bg-brand text-primary-foreground">
             <Pill className="size-6" aria-hidden />
@@ -123,9 +123,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex min-h-screen flex-col">
+      <div className="flex min-h-screen min-w-0 flex-col">
         {/* Mobile top bar */}
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b bg-card/90 px-4 py-3 backdrop-blur lg:hidden">
+        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b bg-card/90 px-4 py-2 backdrop-blur lg:hidden">
           <Link to="/dashboard" className="flex items-center gap-2">
             <span className="grid size-10 place-items-center rounded-xl bg-brand text-primary-foreground">
               <Pill className="size-5" aria-hidden />
@@ -142,7 +142,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-32 pt-6 sm:px-8 sm:pt-10 lg:pb-12">{children}</main>
+        <main className="mx-auto w-full max-w-7xl flex-1 px-3 pb-24 pt-4 sm:px-6 sm:pt-7 lg:pb-12">{children}</main>
 
         {/* Mobile bottom nav */}
         <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
@@ -150,10 +150,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link
               key={n.to}
               to={n.to}
-              className="flex h-20 flex-col items-center justify-center gap-1 text-sm font-semibold text-muted-foreground"
+              className="flex h-16 flex-col items-center justify-center gap-1 text-xs font-semibold text-muted-foreground"
               activeProps={{ className: "!text-primary" }}
             >
-              <n.icon className="size-7" aria-hidden />
+              <n.icon className="size-5" aria-hidden />
               {t(n.label)}
             </Link>
           ))}
@@ -161,11 +161,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             type="button"
             onClick={() => setMoreOpen(true)}
             className={cn(
-              "flex h-20 flex-col items-center justify-center gap-1 text-sm font-semibold text-muted-foreground",
+              "flex h-16 flex-col items-center justify-center gap-1 text-xs font-semibold text-muted-foreground",
               ["/devices", "/caregiver", "/settings"].includes(pathname) && "text-primary",
             )}
           >
-            <Menu className="size-7" aria-hidden />
+            <Menu className="size-5" aria-hidden />
             {t("navMore")}
           </button>
         </nav>

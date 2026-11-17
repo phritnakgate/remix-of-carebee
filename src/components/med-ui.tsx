@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useI18n, type DictKey } from "@/lib/i18n";
-import type { Dose, DoseStatus } from "@/lib/medication";
+import { scheduleCompartment, scheduleFood, scheduleSlotLabel, type Dose, type DoseStatus } from "@/lib/medication";
 import { cn } from "@/lib/utils";
 
 export const MED_COLORS = ["blue", "green", "amber", "rose", "teal", "slate"] as const;
@@ -79,15 +79,18 @@ export function DoseCard({
   onUndo,
   busy,
   compact,
+  boxName,
 }: {
   dose: Dose;
   onTake?: () => void;
   onUndo?: () => void;
   busy?: boolean;
   compact?: boolean;
+  boxName?: string | undefined;
 }) {
   const { t } = useI18n();
   const m = dose.medicine;
+  const compartment = scheduleCompartment(dose.schedule, m);
   const confirmed = dose.log ? format(new Date(dose.log.confirmed_at), "HH:mm") : null;
   return (
     <article
@@ -100,7 +103,7 @@ export function DoseCard({
       <div className="flex flex-1 items-start gap-4">
         <div className="flex flex-col items-center">
           <span className="text-2xl font-bold tabular-nums">{fmtTime(dose.schedule.dose_time)}</span>
-          <span className="text-sm text-muted-foreground">{t(`slot_${dose.schedule.slot}` as DictKey)}</span>
+          <span className="text-center text-sm text-muted-foreground">{t(scheduleSlotLabel(dose.schedule))}</span>
         </div>
         <span className={cn("mt-1 grid size-12 shrink-0 place-items-center rounded-2xl text-primary-foreground", medColorClass[m.color] ?? "bg-primary")}>
           <Pill className="size-6" aria-hidden />
@@ -110,8 +113,9 @@ export function DoseCard({
             {m.name} {m.dosage && <span className="font-medium text-muted-foreground">· {m.dosage}</span>}
           </h3>
           <p className="text-base text-muted-foreground">
-            {m.pills_per_dose} {t("pills")} · {t(`food_${m.food_instruction}` as DictKey)}
-            {m.compartment ? ` · #${m.compartment}` : ""}
+            {m.pills_per_dose} {t("pills")}
+            {!dose.schedule.box_slot ? ` · ${t(`food_${scheduleFood(dose.schedule, m)}`)}` : ""}
+            {boxName ? ` · ${boxName}` : ""}{compartment ? ` · #${compartment}` : ""}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             {dose.dueNow ? (

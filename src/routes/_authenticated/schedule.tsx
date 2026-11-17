@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveBox } from "@/lib/active-box";
 import { useI18n, type DictKey } from "@/lib/i18n";
-import { TIME_SLOTS, type Schedule } from "@/lib/medication";
+import { BOX_SLOTS, TIME_SLOTS, scheduleFood, scheduleSlotLabel, type Schedule } from "@/lib/medication";
 import { useMedicines, useNow, useSchedules } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +36,10 @@ function SchedulePage() {
   const now = useNow();
   const today = now.getDay();
   const medById = new Map((meds.data ?? []).map((m) => [m.id, m]));
-  const list = (scheds.data ?? []).filter((s) => medById.get(s.medicine_id)?.active);
+  const list = (scheds.data ?? []).filter((s) => !s.ends_on && medById.get(s.medicine_id)?.active);
+  const groupLabels = list.some((s) => s.box_slot)
+    ? [...BOX_SLOTS.map((slot) => `round_${slot}` as const), ...TIME_SLOTS.map((slot) => `slot_${slot}` as const).filter((group) => list.some((s) => scheduleSlotLabel(s) === group))]
+    : TIME_SLOTS.map((slot) => `slot_${slot}` as const);
 
   async function update(s: Schedule, patch: Partial<Pick<Schedule, "dose_time" | "days_of_week" | "notify">>) {
     // optimistic
@@ -68,11 +71,11 @@ function SchedulePage() {
                 </tr>
               </thead>
               <tbody>
-                {TIME_SLOTS.map((slot) => (
+                {groupLabels.map((slot) => (
                   <tr key={slot} className="border-t">
-                    <th className="p-3 text-left font-semibold">{t(`slot_${slot}` as DictKey)}</th>
+                    <th className="p-3 text-left font-semibold">{t(slot)}</th>
                     {DAYS.map((d) => {
-                      const items = list.filter((s) => s.slot === slot && s.days_of_week.includes(d));
+                      const items = list.filter((s) => scheduleSlotLabel(s) === slot && s.days_of_week.includes(d));
                       return (
                         <td key={d} className={cn("p-2 align-top", d === today && "bg-accent/50")}>
                           <div className="flex flex-col gap-1">
@@ -106,7 +109,10 @@ function SchedulePage() {
                     <span className={cn("size-4 shrink-0 rounded-full", medColorClass[m.color])} />
                     <div>
                       <h3 className="text-xl font-bold">{m.name}</h3>
-                      <p className="text-base text-muted-foreground">{t(`slot_${s.slot}` as DictKey)} · {t(`food_${m.food_instruction}` as DictKey)}</p>
+                      <p className="text-base text-muted-foreground">
+                        {t(scheduleSlotLabel(s))}
+                        {!s.box_slot ? ` · ${t(`food_${scheduleFood(s, m)}`)}` : ""}
+                      </p>
                     </div>
                   </div>
                   <label className="flex items-center gap-2 text-base font-semibold">
@@ -118,7 +124,7 @@ function SchedulePage() {
                       className="h-12 w-32 text-lg tabular-nums"
                     />
                   </label>
-                  <div role="group" aria-label={t("days")} className="flex gap-1">
+                  <div role="group" aria-label={t("days")} className="flex flex-wrap gap-1">
                     {DAYS.map((d) => {
                       const on = s.days_of_week.includes(d);
                       return (

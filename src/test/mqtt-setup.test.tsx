@@ -8,6 +8,7 @@ import { MqttSetup } from "@/components/mqtt-setup";
 import { mqttTestPayload } from "@/lib/mqtt";
 import { getMqttDue, forwardMqttSensor } from "@/lib/mqtt.functions";
 import { MqttSessionProvider, useMqttSession } from "@/lib/mqtt-session";
+import { saveReminderTemplate } from "@/lib/reminder-template";
 
 const { queryClient } = vi.hoisted(() => ({ queryClient: { invalidateQueries: vi.fn() } }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => queryClient }));
@@ -327,6 +328,10 @@ it("keeps MQTT on another CareBee page, sends the due dose once, and closes on p
       <p>Dashboard</p>
     </MqttSessionProvider>,
   );
+  saveReminderTemplate(
+    deviceId,
+    '{"time":"{{time}}","compartment":"{{compartment}}","schedule_id":"{{schedule_id}}","nested":{"label":"{{date}} · {{time}}"}}',
+  );
   vi.mocked(getMqttDue).mockImplementation(async () => due([dose]));
   if (typeof tick !== "function") throw new Error("MQTT schedule timer did not start");
   act(() => {
@@ -339,6 +344,7 @@ it("keeps MQTT on another CareBee page, sends the due dose once, and closes on p
     time: "16:00",
     compartment: 1,
     schedule_id: dose.schedule_id,
+    nested: { label: `${date} · 16:00` },
   });
 
   fireEvent(document, new Event("visibilitychange"));

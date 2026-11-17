@@ -35,7 +35,7 @@ export async function confirmDeviceDose(request: Request, expectedDeviceId?: str
     return json({ error: "Invalid confirmation", issues: parsed.error.issues }, 400);
 
   await touchDevice(admin, device);
-  const { now, doses } = await todaysDoses(admin, device.owner_id, timezone);
+  const { now, doses } = await todaysDoses(admin, device.owner_id, timezone, device.id);
   if (expectedDeviceId && (!parsed.data.schedule_id || parsed.data.scheduled_date !== now.date)) {
     return json({ error: "Send the schedule ID and its current scheduled date" }, 400);
   }

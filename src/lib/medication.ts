@@ -1,8 +1,8 @@
 // Pure medication rules shared by the app pages and the ESP32 API.
 import type { Database } from "@/integrations/supabase/types";
 
-export type Medicine = Database["public"]["Tables"]["medicines"]["Row"];
-export type Schedule = Database["public"]["Tables"]["medication_schedules"]["Row"];
+export type Medicine = Database["public"]["Tables"]["medicines"]["Row"] & { device_id?: string | null };
+export type Schedule = Database["public"]["Tables"]["medication_schedules"]["Row"] & { box_slot?: BoxSlot | null; ends_on?: string | null };
 export type DoseLog = Database["public"]["Tables"]["dose_logs"]["Row"];
 export type Device = Database["public"]["Tables"]["devices"]["Row"];
 export type DeviceEvent = Database["public"]["Tables"]["device_events"]["Row"];
@@ -16,6 +16,35 @@ export const DEFAULT_SLOT_TIMES: Record<TimeSlot, string> = {
   evening: "18:00",
   bedtime: "21:00",
 };
+
+export const BOX_ROUNDS = {
+  morning_before: { slot: "morning", food: "before_food", compartment: 1, time: "07:30" },
+  morning_after: { slot: "morning", food: "after_food", compartment: 2, time: "08:00" },
+  afternoon_before: { slot: "afternoon", food: "before_food", compartment: 3, time: "11:30" },
+  afternoon_after: { slot: "afternoon", food: "after_food", compartment: 4, time: "12:30" },
+  evening_before: { slot: "evening", food: "before_food", compartment: 5, time: "17:30" },
+  evening_after: { slot: "evening", food: "after_food", compartment: 6, time: "18:30" },
+  bedtime: { slot: "bedtime", food: "any", compartment: 7, time: "21:00" },
+} as const satisfies Record<string, { slot: TimeSlot; food: FoodInstruction; compartment: number; time: string }>;
+
+export type BoxSlot = keyof typeof BOX_ROUNDS;
+export const BOX_SLOTS = Object.keys(BOX_ROUNDS) as BoxSlot[];
+
+export function scheduleSlotLabel(schedule: Schedule) {
+  return schedule.box_slot ? `round_${schedule.box_slot}` as const : `slot_${schedule.slot}` as const;
+}
+
+export function scheduleFood(schedule: Schedule, medicine: Medicine) {
+  return schedule.box_slot ? BOX_ROUNDS[schedule.box_slot].food : medicine.food_instruction;
+}
+
+export function scheduleCompartment(schedule: Schedule, medicine: Medicine) {
+  return schedule.box_slot ? BOX_ROUNDS[schedule.box_slot].compartment : medicine.compartment;
+}
+
+export function doseTargetsBox(schedule: Schedule, medicine: Medicine, deviceId: string) {
+  return medicine.device_id ? medicine.device_id === deviceId : !schedule.box_slot;
+}
 
 /** A dose not confirmed this many minutes after its scheduled time counts as missed. */
 export const MISSED_GRACE_MINUTES = 60;
@@ -88,6 +117,7 @@ export function expandDoses(params: {
       const at = scheduledDate(date, s.dose_time);
       if (at.getTime() < new Date(s.created_at).getTime()) continue;
       const log = logByKey.get(`${s.id}:${date}`) ?? null;
+      if (s.ends_on && date >= s.ends_on && !log) continue;
       const status = doseStatus(at, !!log, params.now);
       doses.push({
         key: `${s.id}:${date}`,

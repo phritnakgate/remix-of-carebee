@@ -24,16 +24,21 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveBox } from "@/lib/active-box";
+import { saveBoxMedicine, useBoxScheduleSupport } from "@/lib/box-schedules";
 import { useI18n, type DictKey } from "@/lib/i18n";
 import {
   DEFAULT_SLOT_TIMES,
+  BOX_ROUNDS,
+  BOX_SLOTS,
+  scheduleSlotLabel,
   TIME_SLOTS,
+  type BoxSlot,
   type FoodInstruction,
   type Medicine,
   type Schedule,
   type TimeSlot,
 } from "@/lib/medication";
-import { useMedicines, useSchedules } from "@/lib/queries";
+import { useDevices, useMedicines, useSchedules } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/medicines")({
@@ -63,6 +68,8 @@ interface FormState {
   notes: string;
   active: boolean;
   slots: TimeSlot[];
+  boxId: string;
+  rounds: Partial<Record<BoxSlot, string>>;
 }
 
 const emptyForm: FormState = {
@@ -76,6 +83,8 @@ const emptyForm: FormState = {
   notes: "",
   active: true,
   slots: ["morning"],
+  boxId: "none",
+  rounds: { morning_after: BOX_ROUNDS.morning_after.time },
 };
 
 function MedicinesPage() {
@@ -84,13 +93,28 @@ function MedicinesPage() {
   const qc = useQueryClient();
   const meds = useMedicines([ownerId]);
   const scheds = useSchedules([ownerId]);
+  const schema = useBoxScheduleSupport();
+  const managed = schema.data === true;
+  const boxes = (useDevices(ownerId).data ?? []).filter((device) => device.mode === "real");
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [toDelete, setToDelete] = useState<Medicine | null>(null);
 
-  const schedulesFor = (id: string) => (scheds.data ?? []).filter((s) => s.medicine_id === id);
+  const schedulesFor = (id: string) => (scheds.data ?? []).filter((s) => s.medicine_id === id && !s.ends_on);
 
   function openEdit(m: Medicine) {
+    const schedules = schedulesFor(m.id);
+    const rounds: FormState["rounds"] = {};
+    const ordered = [...schedules].sort((a, b) =>
+      Number(!!b.box_slot) - Number(!!a.box_slot) ||
+      Date.parse(a.created_at) - Date.parse(b.created_at) ||
+      a.id.localeCompare(b.id),
+    );
+    for (const schedule of ordered) {
+      const legacy = schedule.slot === "bedtime" ? "bedtime" : `${schedule.slot}_${m.food_instruction === "before_food" ? "before" : "after"}` as const;
+      const slot = schedule.box_slot ?? legacy;
+      rounds[slot] ??= fmtTime(schedule.dose_time);
+    }
     setForm({
       id: m.id,
       name: m.name,
@@ -102,14 +126,20 @@ function MedicinesPage() {
       color: m.color,
       notes: m.notes ?? "",
       active: m.active,
-      slots: schedulesFor(m.id).map((s) => s.slot),
+      slots: schedules.map((s) => s.slot),
+      boxId: m.device_id ?? "none",
+      rounds,
     });
   }
 
   async function save() {
     if (!form) return;
     if (!form.name.trim()) return;
-    if (form.slots.length === 0) {
+    const rounds = BOX_SLOTS.flatMap((box_slot) => {
+      const dose_time = form.rounds[box_slot];
+      return dose_time ? [{ box_slot, dose_time }] : [];
+    });
+    if (managed ? !rounds.length : !form.slots.length) {
       toast.error(t("pickOneSlot"));
       return;
     }
@@ -127,27 +157,35 @@ function MedicinesPage() {
         notes: form.notes.trim() || null,
         active: form.active,
       };
-      let medId = form.id;
-      if (medId) {
-        const { error } = await supabase.from("medicines").update(row).eq("id", medId);
-        if (error) throw error;
+      if (managed) {
+        await saveBoxMedicine({
+          ...(form.id ? { medicineId: form.id } : {}),
+          medicine: { ...row, device_id: form.boxId === "none" ? null : form.boxId },
+          rounds,
+        });
       } else {
-        const { data, error } = await supabase.from("medicines").insert(row).select("id").single();
-        if (error) throw error;
-        medId = data.id;
-      }
-      const existing: Schedule[] = schedulesFor(medId);
-      const toAdd = form.slots.filter((s) => !existing.some((e) => e.slot === s));
-      const toRemove = existing.filter((e) => !form.slots.includes(e.slot));
-      if (toAdd.length) {
-        const { error } = await supabase.from("medication_schedules").insert(
-          toAdd.map((slot) => ({ owner_id: ownerId, medicine_id: medId!, slot, dose_time: DEFAULT_SLOT_TIMES[slot] })),
-        );
-        if (error) throw error;
-      }
-      if (toRemove.length) {
-        const { error } = await supabase.from("medication_schedules").delete().in("id", toRemove.map((r) => r.id));
-        if (error) throw error;
+        let medId = form.id;
+        if (medId) {
+          const { error } = await supabase.from("medicines").update(row).eq("id", medId);
+          if (error) throw error;
+        } else {
+          const { data, error } = await supabase.from("medicines").insert(row).select("id").single();
+          if (error) throw error;
+          medId = data.id;
+        }
+        const existing: Schedule[] = schedulesFor(medId);
+        const toAdd = form.slots.filter((s) => !existing.some((e) => e.slot === s));
+        const toRemove = existing.filter((e) => !form.slots.includes(e.slot));
+        if (toAdd.length) {
+          const { error } = await supabase.from("medication_schedules").insert(
+            toAdd.map((slot) => ({ owner_id: ownerId, medicine_id: medId!, slot, dose_time: DEFAULT_SLOT_TIMES[slot] })),
+          );
+          if (error) throw error;
+        }
+        if (toRemove.length) {
+          const { error } = await supabase.from("medication_schedules").delete().in("id", toRemove.map((r) => r.id));
+          if (error) throw error;
+        }
       }
       toast.success(t("saved"));
       setForm(null);
@@ -175,11 +213,13 @@ function MedicinesPage() {
       <PageHeader
         title={t("medicines")}
         action={
-          <Button size="lg" onClick={() => setForm({ ...emptyForm })}>
+          <Button size="lg" disabled={schema.isPending || schema.isError} onClick={() => setForm({ ...emptyForm })}>
             <Plus aria-hidden /> {t("addMedicine")}
           </Button>
         }
       />
+
+      {schema.isError && <p className="mb-3 text-sm text-destructive">{t("boxScheduleLoadFailed")}</p>}
 
       {meds.isLoading ? (
         <p className="text-lg text-muted-foreground">{t("loading")}</p>
@@ -200,7 +240,7 @@ function MedicinesPage() {
                   <div className="min-w-0 flex-1">
                     <h2 className="text-2xl font-bold">{m.name}</h2>
                     <p className="text-base text-muted-foreground">
-                      {[m.dosage, `${m.pills_per_dose} ${t("pills")}`, t(`food_${m.food_instruction}` as DictKey)].filter(Boolean).join(" · ")}
+                      {[m.dosage, `${m.pills_per_dose} ${t("pills")}`, !managed && t(`food_${m.food_instruction}` as DictKey)].filter(Boolean).join(" · ")}
                     </p>
                   </div>
                   {!m.active && <span className="rounded-full bg-muted px-3 py-1 text-sm font-semibold">{t("inactive")}</span>}
@@ -208,7 +248,7 @@ function MedicinesPage() {
                 <div className="flex flex-wrap gap-2">
                   {s.map((x) => (
                     <span key={x.id} className="rounded-full bg-primary-soft px-3 py-1 text-base font-semibold text-accent-foreground">
-                      {t(`slot_${x.slot}` as DictKey)} {fmtTime(x.dose_time)}
+                      {t(scheduleSlotLabel(x))} {fmtTime(x.dose_time)}
                     </span>
                   ))}
                 </div>
@@ -216,7 +256,9 @@ function MedicinesPage() {
                   <span>
                     {t("quantity")}: <strong className="tabular-nums">{m.quantity}</strong>
                   </span>
-                  {m.compartment && (
+                  {managed ? (
+                    <span>{t("medicineBox")} <strong>{boxes.find((box) => box.id === m.device_id)?.name ?? t("unassignedBox")}</strong></span>
+                  ) : m.compartment && (
                     <span>
                       {t("compartment")}: <strong>#{m.compartment}</strong>
                     </span>
@@ -229,7 +271,7 @@ function MedicinesPage() {
                 </div>
                 {m.notes && <p className="rounded-2xl bg-muted p-3 text-base">{m.notes}</p>}
                 <div className="mt-auto flex gap-2">
-                  <Button variant="soft" onClick={() => openEdit(m)}>
+                  <Button variant="soft" disabled={schema.isPending || schema.isError || scheds.isPending || scheds.isError} onClick={() => openEdit(m)}>
                     <Pencil aria-hidden /> {t("edit")}
                   </Button>
                   <Button variant="ghost" onClick={() => setToDelete(m)} aria-label={`${t("delete")} ${m.name}`}>
@@ -268,7 +310,18 @@ function MedicinesPage() {
                 <Field label={t("quantity")} id="qty">
                   <Input id="qty" type="number" min={0} max={9999} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} className="h-12 text-lg" />
                 </Field>
-                <Field label={t("compartment")} id="comp">
+                {managed ? (
+                  <Field label={t("medicineBox")} id="medicine-box">
+                    <Select value={form.boxId} onValueChange={(boxId) => setForm({ ...form, boxId })}>
+                      <SelectTrigger id="medicine-box" className="h-12"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">{t("unassignedBox")}</SelectItem>
+                        {boxes.map((box) => <SelectItem key={box.id} value={box.id}>{box.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    {form.boxId === "none" && <p className="text-xs text-muted-foreground">{t("unassignedBoxHint")}</p>}
+                  </Field>
+                ) : <Field label={t("compartment")} id="comp">
                   <Select value={form.compartment} onValueChange={(v) => setForm({ ...form, compartment: v })}>
                     <SelectTrigger id="comp" className="h-12 text-lg">
                       <SelectValue />
@@ -282,9 +335,32 @@ function MedicinesPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                </Field>
+                </Field>}
               </div>
 
+              {managed ? (
+                <fieldset className="space-y-2">
+                  <legend className="mb-2 font-semibold">{t("whenToTake")}</legend>
+                  {BOX_SLOTS.map((slot) => {
+                    const time = form.rounds[slot];
+                    const label = t(`round_${slot}`);
+                    return (
+                      <div key={slot} className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-1">
+                        <label className="flex min-h-9 flex-1 items-center gap-2 text-sm font-medium">
+                          <input type="checkbox" checked={time !== undefined} onChange={(event) => {
+                            const rounds = { ...form.rounds };
+                            if (event.target.checked) rounds[slot] = BOX_ROUNDS[slot].time;
+                            else delete rounds[slot];
+                            setForm({ ...form, rounds });
+                          }} />
+                          {label}
+                        </label>
+                        {time !== undefined && <Input type="time" required aria-label={`${label} ${t("time")}`} className="w-28" value={time} onChange={(event) => setForm({ ...form, rounds: { ...form.rounds, [slot]: event.target.value } })} />}
+                      </div>
+                    );
+                  })}
+                </fieldset>
+              ) : <>
               <fieldset>
                 <legend className="mb-2 text-base font-semibold">{t("whenToTake")}</legend>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -328,6 +404,7 @@ function MedicinesPage() {
                   ))}
                 </div>
               </fieldset>
+              </>}
 
               <fieldset>
                 <legend className="mb-2 text-base font-semibold">{t("color")}</legend>

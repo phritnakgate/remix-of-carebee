@@ -26,6 +26,7 @@ import {
 } from "./mqtt";
 import { forwardMqttSensor, getMqttDue } from "./mqtt.functions";
 import { useDevices } from "./queries";
+import { readReminderTemplate, renderReminderTemplate } from "./reminder-template";
 
 const openMqtt = createClientOnlyFn(
   async (settings: MqttSettings, onTransport: (socket: WebSocket) => void) => {
@@ -307,7 +308,12 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
           }
 
           for (const dose of due.doses) {
-            if (settings.medicineIds && !settings.medicineIds.includes(dose.medicine_id)) continue;
+            if (
+              !dose.device_id &&
+              settings.medicineIds &&
+              !settings.medicineIds.includes(dose.medicine_id)
+            )
+              continue;
             if (sent.has(dose.schedule_id)) continue;
             const notificationId = `${deviceId}:${due.date}:${dose.schedule_id}`;
             const publish = async () => {
@@ -328,16 +334,18 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
               } catch {
                 // Fall back to this tab's acknowledgement history.
               }
-              const payload =
-                settings.payload ||
-                JSON.stringify({
-                  type: "medication_due",
-                  notification_id: notificationId,
-                  box_id: deviceId,
-                  date: due.date,
-                  timezone: due.timezone,
-                  ...dose,
-                });
+              const message = {
+                type: "medication_due",
+                notification_id: notificationId,
+                box_id: deviceId,
+                date: due.date,
+                timezone: due.timezone,
+                ...dose,
+              };
+              const template = readReminderTemplate(deviceId);
+              const payload = template
+                ? renderReminderTemplate(template, { device_id: null, box_slot: null, ...message })
+                : settings.payload || JSON.stringify(message);
               if (!(await publishMessage(payload, false))) return;
               sent.add(dose.schedule_id);
               try {
