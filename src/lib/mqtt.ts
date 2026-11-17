@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const mqttPayloadLimit = 4096;
+
 const port = z.number().int().min(1).max(65535);
 const topic = z
   .string()
@@ -27,7 +29,7 @@ export const mqttSettingsSchema = z
       .regex(/^\/(?!\/)[A-Za-z0-9/_\-.%]*$/),
     sensorTopic: topic,
     scheduleTopic: topic,
-    payload: z.string().max(4096),
+    payload: z.string().max(mqttPayloadLimit),
     medicineIds: z.array(z.string().uuid()).max(500).nullable().default(null),
   })
   .refine((settings) => settings.sensorTopic !== settings.scheduleTopic, {
@@ -38,6 +40,18 @@ export type MqttSettings = z.infer<typeof mqttSettingsSchema>;
 export type MqttState = "disconnected" | "connecting" | "connected";
 
 const deviceKey = z.string().regex(/^smrb_[0-9a-f]{48}$/);
+export const mqttTestPayload = '{"type":"carebee_test","message":"Hello from CareBee"}';
+
+const mqttTestMessage = z.object({ type: z.literal("carebee_test"), message: z.string() }).strict();
+
+export function isMqttTestMessage(payload: string) {
+  try {
+    return mqttTestMessage.safeParse(JSON.parse(payload)).success;
+  } catch {
+    return false;
+  }
+}
+
 export const mqttSensorSchema = z.union([
   z.object({ device_key: deviceKey, status: z.record(z.unknown()) }).strict(),
   z
@@ -72,6 +86,7 @@ export interface MqttMessage {
   topic: string;
   payload: string;
   state: MqttMessageState;
+  test: boolean;
 }
 
 export type MqttTraffic = Record<MqttDirection, MqttMessage[]>;

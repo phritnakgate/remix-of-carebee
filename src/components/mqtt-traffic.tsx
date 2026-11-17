@@ -1,8 +1,18 @@
-import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Copy, Send } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useI18n, type DictKey } from "@/lib/i18n";
-import type { MqttMessageState, MqttTraffic } from "@/lib/mqtt";
+import {
+  mqttPayloadLimit,
+  mqttTestPayload,
+  type MqttDirection,
+  type MqttMessageState,
+  type MqttTraffic,
+} from "@/lib/mqtt";
 import { cn } from "@/lib/utils";
 
 const messageStates = {
@@ -21,24 +31,37 @@ const columns = [
     direction: "incoming",
     heading: "mqttIncoming",
     empty: "mqttIncomingEmpty",
+    copy: "mqttCopyIncomingTopic",
     Icon: ArrowDownLeft,
   },
   {
     direction: "outgoing",
     heading: "mqttOutgoing",
     empty: "mqttOutgoingEmpty",
+    copy: "mqttCopyOutgoingTopic",
     Icon: ArrowUpRight,
   },
 ] as const;
 
 export function MqttTrafficPanel({
+  deviceId,
   logs,
+  topics,
+  connected,
   onClear,
+  onTestPublish,
 }: {
+  deviceId: string;
   logs: MqttTraffic | undefined;
+  topics: Record<MqttDirection, string>;
+  connected: boolean;
   onClear: () => void;
+  onTestPublish: (payload: string) => Promise<boolean>;
 }) {
   const { t, lang } = useI18n();
+  const [payload, setPayload] = useState(mqttTestPayload);
+  const [sending, setSending] = useState(false);
+  const payloadId = `${deviceId}-mqtt-test-payload`;
   const time = new Intl.DateTimeFormat(lang === "th" ? "th-TH" : "en-GB", {
     hour: "2-digit",
     minute: "2-digit",
@@ -59,7 +82,7 @@ export function MqttTrafficPanel({
         </Button>
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
-        {columns.map(({ direction, heading, empty, Icon }) => {
+        {columns.map(({ direction, heading, empty, copy, Icon }) => {
           const entries = logs?.[direction] ?? [];
           return (
             <div
@@ -69,6 +92,69 @@ export function MqttTrafficPanel({
               <h5 className="flex items-center gap-2 border-b bg-muted/60 px-3 py-2 text-sm font-semibold">
                 <Icon className="size-4 text-primary" aria-hidden /> {t(heading)}
               </h5>
+              <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+                <code className="min-w-0 break-all text-xs text-muted-foreground">
+                  {topics[direction]}
+                </code>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="shrink-0"
+                  aria-label={t(copy)}
+                  title={t(copy)}
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(topics[direction]);
+                      toast.success(t("copied"));
+                    } catch {
+                      toast.error(t("mqttCopyTopicFailed"));
+                    }
+                  }}
+                >
+                  <Copy className="size-4" aria-hidden />
+                </Button>
+              </div>
+              {direction === "outgoing" && (
+                <form
+                  className="space-y-2 border-b px-3 py-3"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    if (!connected || sending || !payload.trim()) return;
+                    setSending(true);
+                    try {
+                      if (!(await onTestPublish(payload))) toast.error(t("mqttMessageSendFailed"));
+                    } catch {
+                      toast.error(t("mqttMessageSendFailed"));
+                    } finally {
+                      setSending(false);
+                    }
+                  }}
+                >
+                  <Label htmlFor={payloadId}>{t("mqttTestPayload")}</Label>
+                  <Textarea
+                    id={payloadId}
+                    className="min-h-16 font-mono text-xs"
+                    value={payload}
+                    maxLength={mqttPayloadLimit}
+                    onChange={(event) => setPayload(event.target.value)}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={!connected || sending || !payload.trim()}
+                    >
+                      <Send className="size-4" aria-hidden /> {t("mqttTestPublish")}
+                    </Button>
+                    {!connected && (
+                      <span className="text-xs text-muted-foreground">
+                        {t("mqttConnectToTest")}
+                      </span>
+                    )}
+                  </div>
+                </form>
+              )}
               {entries.length === 0 ? (
                 <p className="px-3 py-4 text-sm text-muted-foreground">{t(empty)}</p>
               ) : (
@@ -88,14 +174,21 @@ export function MqttTrafficPanel({
                           >
                             {time.format(entry.at)}
                           </time>
-                          <span
-                            className={cn(
-                              "rounded-full px-2 py-0.5 text-xs font-medium",
-                              state.tone,
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {entry.test && (
+                              <span className="rounded-full border px-2 py-0.5 text-xs font-medium">
+                                {t("mqttTestMessage")}
+                              </span>
                             )}
-                          >
-                            {t(state.label)}
-                          </span>
+                            <span
+                              className={cn(
+                                "rounded-full px-2 py-0.5 text-xs font-medium",
+                                state.tone,
+                              )}
+                            >
+                              {t(state.label)}
+                            </span>
+                          </div>
                         </div>
                         <code className="block break-all text-xs font-medium">{entry.topic}</code>
                         <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-2 text-xs">

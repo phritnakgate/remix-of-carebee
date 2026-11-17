@@ -12,6 +12,8 @@ import {
 
 import {
   boxTopic,
+  isMqttTestMessage,
+  mqttPayloadLimit,
   mqttPayloadPreview,
   mqttSettingsSchema,
   type MqttConnection,
@@ -62,12 +64,14 @@ function saveConnection(deviceId: string, settings: MqttSettings, enabled: boole
 interface Session {
   close: () => void;
   checkDue: () => Promise<void>;
+  publishTest: (payload: string) => Promise<boolean>;
 }
 
 interface SessionContext {
   connections: Partial<Record<string, MqttConnection>>;
   traffic: Partial<Record<string, MqttTraffic>>;
   clearTraffic: (deviceId: string) => void;
+  publishTest: (deviceId: string, payload: string) => Promise<boolean>;
   connect: (deviceId: string, settings: MqttSettings) => void;
   disconnect: (deviceId: string) => void;
 }
@@ -128,6 +132,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
       topic: string,
       payload: string,
       state: MqttMessageState,
+      test = false,
     ) => {
       const message = {
         id: ++nextMessageId.current,
@@ -135,6 +140,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
         topic,
         payload: mqttPayloadPreview(payload),
         state,
+        test,
       };
       setTraffic((previous) => {
         const box = previous[deviceId] ?? emptyTraffic;
@@ -164,6 +170,11 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
 
   function clearTraffic(deviceId: string) {
     setTraffic((previous) => ({ ...previous, [deviceId]: undefined }));
+  }
+
+  async function publishTest(deviceId: string, payload: string) {
+    if (!payload.trim() || payload.length > mqttPayloadLimit) return false;
+    return (await sessions.current.get(deviceId)?.publishTest(payload)) ?? false;
   }
 
   const disconnect = useCallback((deviceId: string) => {
@@ -210,6 +221,31 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
           void open();
         }, 10000);
         releaseClient();
+      }
+
+      async function publishMessage(payload: string, test: boolean) {
+        const socket = client;
+        if (!active || !ready || !socket?.connected) return false;
+        const update = recordTraffic(deviceId, "outgoing", scheduleTopic, payload, "sending", test);
+        const acknowledged = await new Promise<boolean>((resolve) => {
+          const timeout = window.setTimeout(() => {
+            resolve(false);
+            if (client === socket) retry();
+          }, 7000);
+          const finish = (success: boolean) => {
+            window.clearTimeout(timeout);
+            resolve(success);
+          };
+          try {
+            socket.publish(scheduleTopic, payload, { qos: 1, retain: false }, (error) =>
+              finish(!error),
+            );
+          } catch {
+            finish(false);
+          }
+        });
+        update(acknowledged ? "acknowledged" : "sendFailed");
+        return acknowledged;
       }
 
       async function checkDue() {
@@ -260,32 +296,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
                   timezone: due.timezone,
                   ...dose,
                 });
-              const markSent = recordTraffic(
-                deviceId,
-                "outgoing",
-                scheduleTopic,
-                payload,
-                "sending",
-              );
-              const acknowledged = await new Promise<boolean>((resolve) => {
-                const timeout = window.setTimeout(() => {
-                  if (client === connected) retry();
-                  resolve(false);
-                }, 7000);
-                const finish = (success: boolean) => {
-                  window.clearTimeout(timeout);
-                  resolve(success);
-                };
-                try {
-                  connected.publish(scheduleTopic, payload, { qos: 1, retain: false }, (error) =>
-                    finish(!error),
-                  );
-                } catch {
-                  finish(false);
-                }
-              });
-              markSent(acknowledged ? "acknowledged" : "sendFailed");
-              if (!acknowledged) return;
+              if (!(await publishMessage(payload, false))) return;
               sent.add(dose.schedule_id);
               try {
                 localStorage.setItem(key, due.date);
@@ -326,14 +337,16 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
             }
             const oversize = packet.payload.length > 8192;
             const message = packet.payload.toString("utf8", 0, 8192);
+            const test = !oversize && isMqttTestMessage(message);
             const markReceived = recordTraffic(
               deviceId,
               "incoming",
               sensorTopic,
               message,
               packet.retain ? "retained" : oversize ? "oversize" : "received",
+              test,
             );
-            if (packet.retain || oversize) {
+            if (packet.retain || oversize || test) {
               done();
               return;
             }
@@ -368,6 +381,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
 
       sessions.current.set(deviceId, {
         checkDue,
+        publishTest: (payload) => publishMessage(payload, true),
         close: () => {
           active = false;
           window.clearTimeout(retryTimer);
@@ -395,7 +409,9 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
   }, [connect, devices]);
 
   return (
-    <Context.Provider value={{ connections, traffic, clearTraffic, connect, disconnect }}>
+    <Context.Provider
+      value={{ connections, traffic, clearTraffic, publishTest, connect, disconnect }}
+    >
       {children}
     </Context.Provider>
   );

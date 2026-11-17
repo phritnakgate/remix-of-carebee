@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import mqtt from "mqtt";
 
 import { MqttSetup } from "@/components/mqtt-setup";
+import { mqttTestPayload } from "@/lib/mqtt";
 import { getMqttDue, forwardMqttSensor } from "@/lib/mqtt.functions";
 import { MqttSessionProvider } from "@/lib/mqtt-session";
 
@@ -108,6 +109,60 @@ it("connects directly over WSS and locks settings through connection until Disco
   expect(host).toBeEnabled();
   expect(socket.end).toHaveBeenCalledWith(true);
   expect(screen.getByRole("status")).toHaveTextContent("mqttDisconnected");
+});
+
+it("sends a manual payload to the configured outgoing topic and displays the incoming MQTTX test", async () => {
+  const socket = fixture();
+  let acknowledge = () => {};
+  socket.publish.mockImplementationOnce((_topic, _payload, _options, callback) => {
+    acknowledge = callback;
+  });
+  render(<MqttSessionProvider userId="owner">{setupPage()}</MqttSessionProvider>);
+  openSettings();
+  const monitor = within(screen.getByRole("region", { name: "mqttTraffic" }));
+  const testPublish = monitor.getByRole("button", { name: "mqttTestPublish" });
+  expect(testPublish).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("mqttScheduleTopic"), { target: { value: "demo/out" } });
+  fireEvent.click(screen.getByRole("button", { name: "mqttConnect" }));
+  await waitFor(() => expect(socket.connect).toHaveBeenCalled());
+  socket.connected = true;
+  act(() => {
+    socket.emit("connect");
+  });
+  await waitFor(() => expect(testPublish).toBeEnabled());
+
+  const payload = "  demo from the website  ";
+  fireEvent.change(monitor.getByLabelText("mqttTestPayload"), { target: { value: payload } });
+  fireEvent.click(testPublish);
+  expect(socket.publish).toHaveBeenCalledTimes(1);
+  expect(socket.publish).toHaveBeenCalledWith(
+    `demo/out/${deviceId}`,
+    payload,
+    { qos: 1, retain: false },
+    expect.any(Function),
+  );
+  const outgoing = within(monitor.getByRole("list", { name: "mqttOutgoing" }));
+  expect(outgoing.getByText("mqttTestMessage")).toBeInTheDocument();
+  expect(outgoing.getByText("mqttMessageSending")).toBeInTheDocument();
+  expect(testPublish).toBeDisabled();
+  act(() => {
+    acknowledge();
+  });
+  await outgoing.findByText("mqttMessageAcknowledged");
+
+  const ack = vi.fn();
+  act(() => {
+    socket.handleMessage(
+      { topic: sensorTopic, retain: false, payload: Buffer.from(mqttTestPayload) },
+      ack,
+    );
+  });
+  const incoming = within(monitor.getByRole("list", { name: "mqttIncoming" }));
+  expect(incoming.getByText("mqttTestMessage")).toBeInTheDocument();
+  expect(incoming.getByText("mqttMessageReceived")).toBeInTheDocument();
+  expect(incoming.getByText(/Hello from CareBee/)).toBeInTheDocument();
+  expect(ack).toHaveBeenCalled();
+  expect(forwardMqttSensor).not.toHaveBeenCalled();
 });
 
 it("keeps MQTT on another CareBee page, sends the due dose once, and closes on page hide", async () => {

@@ -34,7 +34,7 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(() => readMqttSettings(deviceId) ?? mqttDefaults);
-  const { connections, traffic, clearTraffic, connect, disconnect } = useMqttSession();
+  const { connections, traffic, clearTraffic, publishTest, connect, disconnect } = useMqttSession();
   const medicines = useMedicines(open ? [ownerId] : []);
   const connection = connections[deviceId];
   const settings = connection?.settings ?? draft;
@@ -70,7 +70,17 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
       <p className="mt-3 text-sm text-muted-foreground">{t("mqttKeepTabOpen")}</p>
       <p className="mt-1 text-sm text-muted-foreground">{t("mqttPublicBrokerHint")}</p>
 
-      <MqttTrafficPanel logs={traffic[deviceId]} onClear={() => clearTraffic(deviceId)} />
+      <MqttTrafficPanel
+        deviceId={deviceId}
+        logs={traffic[deviceId]}
+        topics={{
+          incoming: boxTopic(settings.sensorTopic.trim(), deviceId),
+          outgoing: boxTopic(settings.scheduleTopic.trim(), deviceId),
+        }}
+        connected={connection?.state === "connected"}
+        onClear={() => clearTraffic(deviceId)}
+        onTestPublish={(payload) => publishTest(deviceId, payload)}
+      />
 
       <form
         className="mt-4 space-y-4"
