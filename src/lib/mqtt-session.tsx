@@ -26,16 +26,23 @@ import {
 import { forwardMqttSensor, getMqttDue } from "./mqtt.functions";
 import { useDevices } from "./queries";
 
-const openMqtt = createClientOnlyFn(async (settings: MqttSettings) => {
-  const { default: mqtt } = await import("mqtt");
-  return mqtt.connect(mqttBrokerUrl(settings), {
-    manualConnect: true,
-    connectTimeout: 8000,
-    reconnectPeriod: 0,
-    keepalive: 30,
-    forceNativeWebSocket: true,
-  });
-});
+const openMqtt = createClientOnlyFn(
+  async (settings: MqttSettings, onTransport: (socket: WebSocket) => void) => {
+    const { default: mqtt } = await import("mqtt");
+    return mqtt.connect(mqttBrokerUrl(settings), {
+      manualConnect: true,
+      connectTimeout: 8000,
+      reconnectPeriod: 0,
+      keepalive: 30,
+      forceNativeWebSocket: true,
+      createWebsocket(url, protocols) {
+        const socket = new WebSocket(url, protocols);
+        onTransport(socket);
+        return socket;
+      },
+    });
+  },
+);
 
 const storagePrefix = "carebee-mqtt:";
 const storageKey = (deviceId: string) => `${storagePrefix}${deviceId}`;
@@ -101,8 +108,8 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
   const stopSession = useCallback((deviceId: string) => {
     const session = sessions.current.get(deviceId);
     sessions.current.delete(deviceId);
-    session?.close();
     setConnections((previous) => ({ ...previous, [deviceId]: undefined }));
+    session?.close();
   }, []);
 
   useEffect(() => {
@@ -210,6 +217,8 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
       const sensorTopic = boxTopic(settings.sensorTopic, deviceId);
       const scheduleTopic = boxTopic(settings.scheduleTopic, deviceId);
       let client: MqttClient | null = null;
+      let transport: WebSocket | null = null;
+      let started = false;
       let subscribeTimer: number | undefined;
       let active = true;
       let ready = false;
@@ -217,6 +226,9 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
       let sentDate = "";
       const sent = new Set<string>();
       const pendingPublishes = new Set<() => void>();
+      const requests = new AbortController();
+      let incoming = Promise.resolve();
+      let queuedReports = 0;
 
       function setState(state: MqttConnection["state"], failed = false) {
         setConnections((previous) => ({ ...previous, [deviceId]: { settings, state, failed } }));
@@ -226,9 +238,17 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
         ready = false;
         window.clearTimeout(subscribeTimer);
         const closing = client;
+        const socket = transport;
         client = null;
+        transport = null;
         pendingPublishes.forEach((cancel) => cancel());
-        closing?.end(true);
+        try {
+          if (started) closing?.end(true);
+        } catch {
+          // MQTT.js can throw if its stream was never created. Close the transport directly.
+        } finally {
+          if (socket && socket.readyState < WebSocket.CLOSING) socket.close();
+        }
       }
 
       function connectionFailed() {
@@ -270,7 +290,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
         if (!ready || !connected?.connected || checking || !active) return;
         checking = true;
         try {
-          const due = await getDue({ data: { deviceId } });
+          const due = await getDue({ data: { deviceId }, signal: requests.signal });
           if (!active) return;
           if (!due) {
             disconnect(deviceId);
@@ -334,12 +354,10 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
       async function open() {
         setState("connecting");
         try {
-          const socket = await openMqtt(settings);
-          if (!active) {
-            socket.end(true);
-            return;
-          }
-          if (client) releaseClient();
+          const socket = await openMqtt(settings, (nativeSocket) => {
+            transport = nativeSocket;
+          });
+          if (!active) return;
           client = socket;
           socket.on("error", () => {
             if (client === socket) connectionFailed();
@@ -347,33 +365,45 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
           socket.on("close", () => {
             if (client === socket) connectionFailed();
           });
-          socket.handleMessage = (packet, done) => {
-            if (client !== socket || packet.topic !== sensorTopic) {
-              done();
-              return;
-            }
-            const oversize = packet.payload.length > 8192;
-            const message = packet.payload.toString("utf8", 0, 8192);
+          socket.on("message", (topic, payload, packet) => {
+            if (client !== socket || topic !== sensorTopic) return;
+            const oversize = payload.length > 8192;
+            const message = payload.toString("utf8", 0, 8192);
             const test = !oversize && isMqttTestMessage(message);
+            const queueFull = queuedReports >= 32;
             const markReceived = recordTraffic(
               deviceId,
               "incoming",
               sensorTopic,
               message,
-              packet.retain ? "retained" : oversize ? "oversize" : "received",
+              packet.retain
+                ? "retained"
+                : oversize
+                  ? "oversize"
+                  : queueFull && !test
+                    ? "notProcessed"
+                    : "received",
               test,
             );
-            if (packet.retain || oversize || test) {
-              done();
-              return;
-            }
-            void forward({ data: { deviceId, message } })
-              .then(
-                (accepted) => markReceived(accepted ? "processed" : "notProcessed"),
-                () => markReceived("notProcessed"),
-              )
-              .finally(done);
-          };
+            if (packet.retain || oversize || test || queueFull) return;
+            queuedReports += 1;
+            // Preserve sensor ordering without holding up MQTT acknowledgements or keepalives.
+            incoming = incoming.then(async () => {
+              try {
+                if (requests.signal.aborted) {
+                  markReceived("notProcessed");
+                  return;
+                }
+                const signal = AbortSignal.any([requests.signal, AbortSignal.timeout(8000)]);
+                const accepted = await forward({ data: { deviceId, message }, signal });
+                markReceived(accepted ? "processed" : "notProcessed");
+              } catch {
+                markReceived("notProcessed");
+              } finally {
+                queuedReports -= 1;
+              }
+            });
+          });
           socket.once("connect", () => {
             subscribeTimer = window.setTimeout(() => {
               if (client === socket) connectionFailed();
@@ -391,6 +421,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
             });
           });
           socket.connect();
+          started = true;
         } catch {
           connectionFailed();
         }
@@ -401,6 +432,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
         publishTest: (payload) => publishMessage(payload, true),
         close: () => {
           active = false;
+          requests.abort();
           releaseClient();
         },
       });

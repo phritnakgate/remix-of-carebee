@@ -52,10 +52,6 @@ function fixture() {
     connected: false,
     connect: vi.fn(),
     end: vi.fn(),
-    handleMessage: (
-      _packet: { topic: string; retain: boolean; payload: Buffer },
-      _done: () => void,
-    ) => {},
     subscribe: vi.fn((_topic, _options, callback: (...args: unknown[]) => void) =>
       callback(null, [{ qos: 1 }]),
     ),
@@ -79,6 +75,57 @@ beforeEach(() => {
   vi.resetAllMocks();
   localStorage.clear();
   vi.mocked(getMqttDue).mockResolvedValue(due([]));
+});
+
+it("unlocks broker settings if opening the MQTT transport throws before a stream exists", async () => {
+  const socket = fixture();
+  socket.connect.mockImplementationOnce(() => {
+    throw new Error("WebSocket construction failed");
+  });
+  socket.end.mockImplementationOnce(() => {
+    throw new TypeError("Cannot read properties of undefined (reading 'on')");
+  });
+  render(<MqttSessionProvider userId="owner">{setupPage()}</MqttSessionProvider>);
+  openSettings();
+  fireEvent.click(screen.getByRole("button", { name: "mqttConnect" }));
+  await screen.findByText("mqttConnectionFailed");
+  expect(socket.end).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("mqttHost")).toBeEnabled();
+  expect(screen.getByRole("button", { name: "mqttConnect" })).toBeEnabled();
+});
+
+it("closes the native WebSocket and unlocks settings even if MQTT.js end throws", async () => {
+  const socket = fixture();
+  const closeTransport = vi.fn();
+  vi.stubGlobal(
+    "WebSocket",
+    class {
+      static CLOSING = 2;
+      readyState = 1;
+      close = closeTransport;
+    },
+  );
+  try {
+    socket.connect.mockImplementationOnce(() => {
+      const options = vi.mocked(mqtt.connect).mock.calls[0]?.[1];
+      if (!options?.createWebsocket) throw new Error("Missing WebSocket factory");
+      options.createWebsocket("wss://broker.hivemq.com:8884/mqtt", ["mqtt"], options);
+    });
+    socket.end.mockImplementationOnce(() => {
+      throw new Error("MQTT.js could not close its stream");
+    });
+    render(<MqttSessionProvider userId="owner">{setupPage()}</MqttSessionProvider>);
+    openSettings();
+    fireEvent.click(screen.getByRole("button", { name: "mqttConnect" }));
+    await waitFor(() => expect(socket.connect).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "mqttDisconnect" }));
+    expect(socket.end).toHaveBeenCalledWith(true);
+    expect(closeTransport).toHaveBeenCalled();
+    expect(screen.getByLabelText("mqttHost")).toBeEnabled();
+    expect(screen.getByRole("status")).toHaveTextContent("mqttDisconnected");
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });
 
 it("connects directly over WSS and locks settings through connection until Disconnect", async () => {
@@ -206,19 +253,31 @@ it("sends a manual payload to the configured outgoing topic and displays the inc
   });
   await outgoing.findByText("mqttMessageAcknowledged");
 
-  const ack = vi.fn();
   act(() => {
-    socket.handleMessage(
-      { topic: sensorTopic, retain: false, payload: Buffer.from(mqttTestPayload) },
-      ack,
-    );
+    socket.emit("message", sensorTopic, Buffer.from(mqttTestPayload), { retain: false });
   });
   const incoming = within(monitor.getByRole("list", { name: "mqttIncoming" }));
   expect(incoming.getByText("mqttTestMessage")).toBeInTheDocument();
   expect(incoming.getByText("mqttMessageReceived")).toBeInTheDocument();
   expect(incoming.getByText(/Hello from CareBee/)).toBeInTheDocument();
-  expect(ack).toHaveBeenCalled();
   expect(forwardMqttSensor).not.toHaveBeenCalled();
+
+  let finishReport = (_accepted: boolean) => {};
+  vi.mocked(forwardMqttSensor).mockReturnValue(
+    new Promise<boolean>((resolve) => {
+      finishReport = resolve;
+    }),
+  );
+  act(() => {
+    socket.emit("message", sensorTopic, Buffer.from('{"status":{"led":"on"}}'), { retain: false });
+  });
+  await waitFor(() => expect(forwardMqttSensor).toHaveBeenCalledTimes(1));
+  fireEvent.click(testPublish);
+  await waitFor(() => expect(outgoing.getAllByText("mqttMessageAcknowledged")).toHaveLength(2));
+  await act(async () => {
+    finishReport(true);
+  });
+  expect(incoming.getByText("mqttMessageProcessed")).toBeInTheDocument();
 });
 
 it("keeps MQTT on another CareBee page, sends the due dose once, and closes on page hide", async () => {
@@ -264,16 +323,20 @@ it("keeps MQTT on another CareBee page, sends the due dose once, and closes on p
 
   const secret = "smrb_" + "0".repeat(48);
   const message = JSON.stringify({ device_key: secret, status: { led: "on" } });
-  const ack = vi.fn();
   vi.mocked(forwardMqttSensor).mockResolvedValue(true);
-  socket.handleMessage(
-    { topic: sensorTopic, retain: true, payload: Buffer.from(message) },
-    vi.fn(),
-  );
+  act(() => {
+    socket.emit("message", sensorTopic, Buffer.from(message), { retain: true });
+  });
   expect(forwardMqttSensor).not.toHaveBeenCalled();
-  socket.handleMessage({ topic: sensorTopic, retain: false, payload: Buffer.from(message) }, ack);
-  await waitFor(() => expect(ack).toHaveBeenCalled());
-  expect(forwardMqttSensor).toHaveBeenCalledWith({ data: { deviceId, message } });
+  act(() => {
+    socket.emit("message", sensorTopic, Buffer.from(message), { retain: false });
+  });
+  await waitFor(() =>
+    expect(forwardMqttSensor).toHaveBeenCalledWith({
+      data: { deviceId, message },
+      signal: expect.any(AbortSignal),
+    }),
+  );
 
   screenTree.rerender(<MqttSessionProvider userId="owner">{setupPage()}</MqttSessionProvider>);
   openSettings();
