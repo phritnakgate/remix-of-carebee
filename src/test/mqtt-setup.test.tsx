@@ -111,6 +111,62 @@ it("connects directly over WSS and locks settings through connection until Disco
   expect(screen.getByRole("status")).toHaveTextContent("mqttDisconnected");
 });
 
+it("uses the EMQX WSS preset and waits for a manual Connect after the socket closes", async () => {
+  const socket = fixture();
+  const page = <MqttSessionProvider userId="owner">{setupPage()}</MqttSessionProvider>;
+  const view = render(page);
+  openSettings();
+  fireEvent.click(screen.getByRole("button", { name: "EMQX Public" }));
+  expect(screen.getByLabelText("mqttHost")).toHaveValue("broker.emqx.io");
+  expect(screen.getByLabelText("mqttTlsWsPort")).toHaveValue(8084);
+  fireEvent.click(screen.getByRole("button", { name: "mqttConnect" }));
+  await waitFor(() => expect(socket.connect).toHaveBeenCalledTimes(1));
+  expect(mqtt.connect).toHaveBeenCalledWith("wss://broker.emqx.io:8084/mqtt", expect.any(Object));
+
+  socket.connected = true;
+  act(() => {
+    socket.emit("connect");
+  });
+  socket.publish.mockImplementationOnce(() => {});
+  vi.useFakeTimers();
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "mqttTestPublish" }));
+    expect(screen.getByText("mqttMessageSending")).toBeInTheDocument();
+    await act(async () => {
+      socket.emit("close");
+    });
+    expect(screen.getByText("mqttConnectionFailed")).toBeInTheDocument();
+    expect(screen.getByText("mqttMessageSendFailed")).toBeInTheDocument();
+    expect(screen.getByLabelText("mqttHost")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "mqttConnect" })).toBeEnabled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15000);
+    });
+    expect(mqtt.connect).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
+  view.unmount();
+  render(page);
+  expect(mqtt.connect).toHaveBeenCalledTimes(1);
+});
+
+it("closes the socket when the user disconnects the same box in another tab", async () => {
+  const socket = fixture();
+  render(<MqttSessionProvider userId="owner">{setupPage()}</MqttSessionProvider>);
+  openSettings();
+  fireEvent.click(screen.getByRole("button", { name: "mqttConnect" }));
+  await waitFor(() => expect(socket.connect).toHaveBeenCalledTimes(1));
+  const key = `carebee-mqtt:${deviceId}`;
+  const saved = JSON.parse(localStorage.getItem(key)!);
+  const newValue = JSON.stringify({ ...saved, enabled: false });
+  localStorage.setItem(key, newValue);
+  fireEvent(window, new StorageEvent("storage", { key, newValue }));
+  expect(socket.end).toHaveBeenCalledWith(true);
+  expect(screen.getByRole("button", { name: "mqttConnect" })).toBeEnabled();
+  expect(screen.getByLabelText("mqttHost")).toBeEnabled();
+});
+
 it("sends a manual payload to the configured outgoing topic and displays the incoming MQTTX test", async () => {
   const socket = fixture();
   let acknowledge = () => {};

@@ -13,6 +13,7 @@ import {
 import {
   boxTopic,
   isMqttTestMessage,
+  mqttBrokerUrl,
   mqttPayloadLimit,
   mqttPayloadPreview,
   mqttSettingsSchema,
@@ -27,7 +28,7 @@ import { useDevices } from "./queries";
 
 const openMqtt = createClientOnlyFn(async (settings: MqttSettings) => {
   const { default: mqtt } = await import("mqtt");
-  return mqtt.connect(`wss://${settings.host}:${settings.websocketPort}${settings.websocketPath}`, {
+  return mqtt.connect(mqttBrokerUrl(settings), {
     manualConnect: true,
     connectTimeout: 8000,
     reconnectPeriod: 0,
@@ -36,7 +37,8 @@ const openMqtt = createClientOnlyFn(async (settings: MqttSettings) => {
   });
 });
 
-const storageKey = (deviceId: string) => `carebee-mqtt:${deviceId}`;
+const storagePrefix = "carebee-mqtt:";
+const storageKey = (deviceId: string) => `${storagePrefix}${deviceId}`;
 
 function readSavedConnection(deviceId: string) {
   try {
@@ -96,6 +98,13 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
   const getDue = useServerFn(getMqttDue);
   const forward = useServerFn(forwardMqttSensor);
 
+  const stopSession = useCallback((deviceId: string) => {
+    const session = sessions.current.get(deviceId);
+    sessions.current.delete(deviceId);
+    session?.close();
+    setConnections((previous) => ({ ...previous, [deviceId]: undefined }));
+  }, []);
+
   useEffect(() => {
     const active = sessions.current;
     const seen = restored.current;
@@ -111,19 +120,26 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
       setConnections({});
       setTraffic({});
     };
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key?.startsWith(storagePrefix)) return;
+      const deviceId = event.key.slice(storagePrefix.length);
+      if (active.has(deviceId) && !readSavedConnection(deviceId)?.enabled) stopSession(deviceId);
+    };
     window.addEventListener("pagehide", pageHide);
     window.addEventListener("pageshow", checkAll);
     window.addEventListener("focus", checkAll);
+    window.addEventListener("storage", onStorage);
     document.addEventListener("visibilitychange", checkAll);
     return () => {
       window.clearInterval(timer);
       window.removeEventListener("pagehide", pageHide);
       window.removeEventListener("pageshow", checkAll);
       window.removeEventListener("focus", checkAll);
+      window.removeEventListener("storage", onStorage);
       document.removeEventListener("visibilitychange", checkAll);
       closeAll();
     };
-  }, []);
+  }, [stopSession]);
 
   const recordTraffic = useCallback(
     (
@@ -177,13 +193,14 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
     return (await sessions.current.get(deviceId)?.publishTest(payload)) ?? false;
   }
 
-  const disconnect = useCallback((deviceId: string) => {
-    const saved = readSavedConnection(deviceId);
-    if (saved) saveConnection(deviceId, saved.settings, false);
-    sessions.current.get(deviceId)?.close();
-    sessions.current.delete(deviceId);
-    setConnections((previous) => ({ ...previous, [deviceId]: undefined }));
-  }, []);
+  const disconnect = useCallback(
+    (deviceId: string) => {
+      const saved = readSavedConnection(deviceId);
+      if (saved) saveConnection(deviceId, saved.settings, false);
+      stopSession(deviceId);
+    },
+    [stopSession],
+  );
 
   const connect = useCallback(
     (deviceId: string, settings: MqttSettings) => {
@@ -193,13 +210,13 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
       const sensorTopic = boxTopic(settings.sensorTopic, deviceId);
       const scheduleTopic = boxTopic(settings.scheduleTopic, deviceId);
       let client: MqttClient | null = null;
-      let retryTimer: number | undefined;
       let subscribeTimer: number | undefined;
       let active = true;
       let ready = false;
       let checking = false;
       let sentDate = "";
       const sent = new Set<string>();
+      const pendingPublishes = new Set<() => void>();
 
       function setState(state: MqttConnection["state"], failed = false) {
         setConnections((previous) => ({ ...previous, [deviceId]: { settings, state, failed } }));
@@ -210,17 +227,14 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
         window.clearTimeout(subscribeTimer);
         const closing = client;
         client = null;
+        pendingPublishes.forEach((cancel) => cancel());
         closing?.end(true);
       }
 
-      function retry() {
-        if (!active || retryTimer !== undefined) return;
+      function connectionFailed() {
+        if (!active) return;
+        disconnect(deviceId);
         setState("disconnected", true);
-        retryTimer = window.setTimeout(() => {
-          retryTimer = undefined;
-          void open();
-        }, 10000);
-        releaseClient();
       }
 
       async function publishMessage(payload: string, test: boolean) {
@@ -229,13 +243,16 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
         const update = recordTraffic(deviceId, "outgoing", scheduleTopic, payload, "sending", test);
         const acknowledged = await new Promise<boolean>((resolve) => {
           const timeout = window.setTimeout(() => {
-            resolve(false);
-            if (client === socket) retry();
+            finish(false);
+            if (client === socket) connectionFailed();
           }, 7000);
           const finish = (success: boolean) => {
             window.clearTimeout(timeout);
+            pendingPublishes.delete(cancel);
             resolve(success);
           };
+          const cancel = () => finish(false);
+          pendingPublishes.add(cancel);
           try {
             socket.publish(scheduleTopic, payload, { qos: 1, retain: false }, (error) =>
               finish(!error),
@@ -325,10 +342,10 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
           if (client) releaseClient();
           client = socket;
           socket.on("error", () => {
-            if (client === socket) retry();
+            if (client === socket) connectionFailed();
           });
           socket.on("close", () => {
-            if (client === socket) retry();
+            if (client === socket) connectionFailed();
           });
           socket.handleMessage = (packet, done) => {
             if (client !== socket || packet.topic !== sensorTopic) {
@@ -359,13 +376,13 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
           };
           socket.once("connect", () => {
             subscribeTimer = window.setTimeout(() => {
-              if (client === socket) retry();
+              if (client === socket) connectionFailed();
             }, 8000);
             socket.subscribe(sensorTopic, { qos: 1 }, (error, grants) => {
               if (client !== socket) return;
               window.clearTimeout(subscribeTimer);
               if (error || !grants?.[0] || grants[0].qos > 2) {
-                retry();
+                connectionFailed();
                 return;
               }
               ready = true;
@@ -375,7 +392,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
           });
           socket.connect();
         } catch {
-          retry();
+          connectionFailed();
         }
       }
 
@@ -384,7 +401,6 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
         publishTest: (payload) => publishMessage(payload, true),
         close: () => {
           active = false;
-          window.clearTimeout(retryTimer);
           releaseClient();
         },
       });

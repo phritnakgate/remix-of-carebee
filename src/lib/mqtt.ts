@@ -106,15 +106,22 @@ export function mqttPayloadPreview(message: string) {
   return preview.length > 2048 ? `${preview.slice(0, 2048)}…` : preview;
 }
 
+export const mqttPublicBrokers = {
+  hiveMq: { host: "broker.hivemq.com", websocketPort: 8884, websocketPath: "/mqtt" },
+  emqx: { host: "broker.emqx.io", websocketPort: 8084, websocketPath: "/mqtt" },
+} as const;
+
 export const mqttDefaults: MqttSettings = {
-  host: "broker.hivemq.com",
-  websocketPort: 8884,
-  websocketPath: "/mqtt",
+  ...mqttPublicBrokers.hiveMq,
   sensorTopic: "medicine/sensor",
   scheduleTopic: "medicine/schedule",
   payload: "",
   medicineIds: null,
 };
+
+export function mqttBrokerUrl(settings: MqttSettings) {
+  return `wss://${settings.host}:${settings.websocketPort}${settings.websocketPath}`;
+}
 
 export function boxTopic(prefix: string, deviceId: string) {
   return `${prefix}/${deviceId}`;

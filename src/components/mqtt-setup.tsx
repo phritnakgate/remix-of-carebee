@@ -7,7 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
-import { boxTopic, mqttDefaults, mqttSettingsSchema, type MqttSettings } from "@/lib/mqtt";
+import {
+  boxTopic,
+  mqttBrokerUrl,
+  mqttDefaults,
+  mqttPublicBrokers,
+  mqttSettingsSchema,
+  type MqttSettings,
+} from "@/lib/mqtt";
 import { readMqttSettings, useMqttSession } from "@/lib/mqtt-session";
 import { useMedicines } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -37,9 +44,9 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
   const { connections, traffic, clearTraffic, publishTest, connect, disconnect } = useMqttSession();
   const medicines = useMedicines(open ? [ownerId] : []);
   const connection = connections[deviceId];
-  const settings = connection?.settings ?? draft;
+  const locked = !!connection && connection.state !== "disconnected";
+  const settings = locked ? connection.settings : draft;
   const indicator = states[connection?.state ?? "disconnected"];
-  const locked = !!connection;
   const field = (name: string) => `${deviceId}-mqtt-${name}`;
   const patch = (values: Partial<MqttSettings>) => setDraft({ ...settings, ...values });
 
@@ -63,7 +70,7 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
           {t(indicator.label)}
         </span>
         {connection?.failed && (
-          <span className="text-sm text-muted-foreground">{t("mqttRetrying")}</span>
+          <span className="text-sm text-muted-foreground">{t("mqttConnectionFailed")}</span>
         )}
       </div>
 
@@ -97,6 +104,24 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
         }}
       >
         <fieldset disabled={locked} className="space-y-5 disabled:opacity-70">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => patch(mqttPublicBrokers.emqx)}
+            >
+              EMQX Public
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => patch(mqttPublicBrokers.hiveMq)}
+            >
+              HiveMQ Public
+            </Button>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor={field("host")}>{t("mqttHost")}</Label>
@@ -130,6 +155,9 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
                 required
                 maxLength={200}
               />
+              <code className="block break-all text-xs text-muted-foreground">
+                {mqttBrokerUrl(settings)}
+              </code>
             </div>
             <div className="min-w-0 space-y-2">
               <Label htmlFor={field("sensor")}>{t("mqttSensorTopic")}</Label>
@@ -209,7 +237,7 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
           </div>
         </fieldset>
 
-        {connection ? (
+        {locked ? (
           <Button type="button" variant="outline" onClick={() => disconnect(deviceId)}>
             {t("mqttDisconnect")}
           </Button>
