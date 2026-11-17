@@ -74,10 +74,10 @@ function CaregiverPage() {
   }
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-5 sm:space-y-6">
       <PageHeader title={t("caregiver")} body={t("caregiverBody")} />
 
-      <section className="rounded-3xl border bg-card p-6 shadow-soft">
+      <section className="rounded-2xl border bg-card p-3.5 sm:p-4 shadow-soft">
         <h2 className="text-xl font-bold">{t("joinAsCaregiver")}</h2>
         <form onSubmit={link} className="mt-4 flex flex-col gap-3 sm:flex-row">
           <Input
@@ -87,7 +87,7 @@ function CaregiverPage() {
             onChange={(e) => setCode(e.target.value)}
             maxLength={12}
             required
-            className="h-14 font-mono text-xl uppercase tracking-widest"
+            className="h-11 font-mono text-base uppercase tracking-widest"
           />
           <Button type="submit" size="lg" disabled={linking}>
             <HeartHandshake aria-hidden /> {t("link")}
@@ -150,7 +150,7 @@ function CaregiverPage() {
               const mine = doses.filter((d) => d.schedule.owner_id === e.id);
               const s = summarize(mine);
               return (
-                <article key={e.id} className="rounded-3xl border bg-card p-6 shadow-soft">
+                <article key={e.id} className="rounded-2xl border bg-card p-3.5 sm:p-4 shadow-soft">
                   <div className="flex items-center gap-4">
                     {e.avatar_url ? (
                       <img src={e.avatar_url} alt="" className="size-14 rounded-full object-cover" referrerPolicy="no-referrer" />

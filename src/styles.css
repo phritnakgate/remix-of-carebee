@@ -13,6 +13,14 @@
   --font-display: "Anuphan", "Noto Sans Thai", system-ui, sans-serif;
   --font-google: "Google Sans", "Anuphan", system-ui, sans-serif;
 
+  --text-lg: 1.0625rem;
+  --text-xl: 1.1875rem;
+  --text-2xl: 1.375rem;
+  --text-3xl: 1.625rem;
+  --text-4xl: 2rem;
+  --text-5xl: 2.5rem;
+  --text-6xl: 3.25rem;
+
   --radius-sm: calc(var(--radius) - 6px);
   --radius-md: calc(var(--radius) - 3px);
   --radius-lg: var(--radius);
@@ -76,7 +84,7 @@
 }
 
 :root {
-  --radius: 1rem;
+  --radius: 0.8125rem;
 
   /* White, light blue, soft green */
   --background: oklch(0.985 0.006 230);

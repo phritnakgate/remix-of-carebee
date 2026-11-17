@@ -226,19 +226,19 @@ function MedicinesPage() {
       ) : (meds.data ?? []).length === 0 ? (
         <EmptyState icon={<Pill className="size-8" />} title={t("noMedicines")} />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
           {meds.data!.map((m) => {
             const s = schedulesFor(m.id);
             const perDay = s.length * m.pills_per_dose;
             const low = perDay > 0 && m.quantity < perDay * LOW_STOCK_DAYS;
             return (
-              <article key={m.id} className={cn("flex flex-col gap-4 rounded-3xl border bg-card p-6 shadow-soft", !m.active && "opacity-60")}>
-                <div className="flex items-start gap-4">
-                  <span className={cn("grid size-14 shrink-0 place-items-center rounded-2xl text-primary-foreground", medColorClass[m.color])}>
-                    <Pill className="size-7" aria-hidden />
+              <article key={m.id} className={cn("flex min-w-0 flex-col gap-3 rounded-2xl border bg-card p-3.5 sm:p-4 shadow-soft", !m.active && "opacity-60")}>
+                <div className="flex items-start gap-2.5">
+                  <span className={cn("grid size-9 shrink-0 place-items-center rounded-xl text-primary-foreground", medColorClass[m.color])}>
+                    <Pill className="size-5" aria-hidden />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <h2 className="text-2xl font-bold">{m.name}</h2>
+                    <h2 className="break-words text-lg font-bold sm:text-xl">{m.name}</h2>
                     <p className="text-base text-muted-foreground">
                       {[m.dosage, `${m.pills_per_dose} ${t("pills")}`, !managed && t(`food_${m.food_instruction}` as DictKey)].filter(Boolean).join(" · ")}
                     </p>
@@ -247,12 +247,12 @@ function MedicinesPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {s.map((x) => (
-                    <span key={x.id} className="rounded-full bg-primary-soft px-3 py-1 text-base font-semibold text-accent-foreground">
+                    <span key={x.id} className="rounded-full bg-primary-soft px-2.5 py-1 text-sm font-semibold text-accent-foreground">
                       {t(scheduleSlotLabel(x))} {fmtTime(x.dose_time)}
                     </span>
                   ))}
                 </div>
-                <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-base">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                   <span>
                     {t("quantity")}: <strong className="tabular-nums">{m.quantity}</strong>
                   </span>
@@ -285,30 +285,30 @@ function MedicinesPage() {
       )}
 
       <Dialog open={!!form} onOpenChange={(o) => !o && setForm(null)}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl sm:max-w-xl">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle className="text-2xl">{form?.id ? t("editMedicine") : t("addMedicine")}</DialogTitle>
           </DialogHeader>
           {form && (
             <form
-              className="space-y-5"
+              className="space-y-3"
               onSubmit={(e) => {
                 e.preventDefault();
                 save();
               }}
             >
               <Field label={t("name")} id="name">
-                <Input id="name" required maxLength={80} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="h-12 text-lg" />
+                <Input id="name" required maxLength={80} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="h-11 text-base" />
               </Field>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-2.5">
                 <Field label={t("dosage")} id="dosage">
-                  <Input id="dosage" maxLength={40} placeholder={t("dosagePlaceholder")} value={form.dosage} onChange={(e) => setForm({ ...form, dosage: e.target.value })} className="h-12 text-lg" />
+                  <Input id="dosage" maxLength={40} placeholder={t("dosagePlaceholder")} value={form.dosage} onChange={(e) => setForm({ ...form, dosage: e.target.value })} className="h-11 text-base" />
                 </Field>
                 <Field label={t("pillsPerDose")} id="ppd">
-                  <Input id="ppd" type="number" min={1} max={20} value={form.pills_per_dose} onChange={(e) => setForm({ ...form, pills_per_dose: Number(e.target.value) })} className="h-12 text-lg" />
+                  <Input id="ppd" type="number" min={1} max={20} value={form.pills_per_dose} onChange={(e) => setForm({ ...form, pills_per_dose: Number(e.target.value) })} className="h-11 text-base" />
                 </Field>
                 <Field label={t("quantity")} id="qty">
-                  <Input id="qty" type="number" min={0} max={9999} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} className="h-12 text-lg" />
+                  <Input id="qty" type="number" min={0} max={9999} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} className="h-11 text-base" />
                 </Field>
                 {managed ? (
                   <Field label={t("medicineBox")} id="medicine-box">
@@ -323,7 +323,7 @@ function MedicinesPage() {
                   </Field>
                 ) : <Field label={t("compartment")} id="comp">
                   <Select value={form.compartment} onValueChange={(v) => setForm({ ...form, compartment: v })}>
-                    <SelectTrigger id="comp" className="h-12 text-lg">
+                    <SelectTrigger id="comp" className="h-11 text-base">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -373,7 +373,7 @@ function MedicinesPage() {
                         aria-pressed={on}
                         onClick={() => setForm({ ...form, slots: on ? form.slots.filter((s) => s !== slot) : [...form.slots, slot] })}
                         className={cn(
-                          "flex h-16 flex-col items-center justify-center rounded-2xl border-2 text-base font-semibold transition-colors",
+                          "flex h-12 flex-col items-center justify-center rounded-2xl border-2 text-base font-semibold transition-colors",
                           on ? "border-primary bg-primary-soft text-accent-foreground" : "border-border text-muted-foreground",
                         )}
                       >
@@ -408,7 +408,7 @@ function MedicinesPage() {
 
               <fieldset>
                 <legend className="mb-2 text-base font-semibold">{t("color")}</legend>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-2">
                   {MED_COLORS.map((c) => (
                     <button
                       key={c}
@@ -423,10 +423,10 @@ function MedicinesPage() {
               </fieldset>
 
               <Field label={t("notes")} id="notes">
-                <Textarea id="notes" maxLength={300} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="text-lg" />
+                <Textarea id="notes" maxLength={300} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="text-base" />
               </Field>
 
-              <label className="flex items-center justify-between rounded-2xl bg-muted p-4 text-base font-semibold">
+              <label className="flex items-center justify-between rounded-xl bg-muted p-3 text-base font-semibold">
                 {t("active")}
                 <Switch checked={form.active} onCheckedChange={(v) => setForm({ ...form, active: v })} />
               </label>

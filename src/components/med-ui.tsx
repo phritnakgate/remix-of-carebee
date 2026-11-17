@@ -29,10 +29,10 @@ export function fmtTime(time: string) {
 
 export function PageHeader({ title, body, action }: { title: string; body?: string; action?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <h1 className="text-3xl font-bold sm:text-4xl">{title}</h1>
-        {body && <p className="mt-2 text-lg text-muted-foreground">{body}</p>}
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-3 sm:mb-5">
+      <div className="min-w-0 flex-1 basis-44">
+        <h1 className="text-2xl font-bold sm:text-3xl">{title}</h1>
+        {body && <p className="mt-1 text-sm text-muted-foreground sm:text-base">{body}</p>}
       </div>
       {action}
     </div>
@@ -95,29 +95,29 @@ export function DoseCard({
   return (
     <article
       className={cn(
-        "flex flex-col gap-4 rounded-2xl border bg-card p-5 shadow-soft sm:flex-row sm:items-center",
+        "flex flex-col gap-3 rounded-2xl border bg-card p-3 shadow-soft sm:p-4 md:flex-row md:items-center",
         dose.dueNow && "border-pending ring-2 ring-pending/30",
         dose.status === "missed" && "border-missed/40",
       )}
     >
-      <div className="flex flex-1 items-start gap-4">
-        <div className="flex flex-col items-center">
-          <span className="text-2xl font-bold tabular-nums">{fmtTime(dose.schedule.dose_time)}</span>
-          <span className="text-center text-sm text-muted-foreground">{t(scheduleSlotLabel(dose.schedule))}</span>
+      <div className="flex min-w-0 flex-1 items-start gap-2.5 sm:gap-3">
+        <div className="flex w-[4.25rem] shrink-0 flex-col items-center">
+          <span className="text-xl font-bold tabular-nums">{fmtTime(dose.schedule.dose_time)}</span>
+          <span className="text-center text-xs text-muted-foreground">{t(scheduleSlotLabel(dose.schedule))}</span>
         </div>
-        <span className={cn("mt-1 grid size-12 shrink-0 place-items-center rounded-2xl text-primary-foreground", medColorClass[m.color] ?? "bg-primary")}>
-          <Pill className="size-6" aria-hidden />
+        <span className={cn("mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg text-primary-foreground sm:size-9", medColorClass[m.color] ?? "bg-primary")}>
+          <Pill className="size-4" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="text-xl font-bold">
+          <h3 className="break-words text-base font-bold sm:text-lg">
             {m.name} {m.dosage && <span className="font-medium text-muted-foreground">· {m.dosage}</span>}
           </h3>
-          <p className="text-base text-muted-foreground">
+          <p className="break-words text-sm text-muted-foreground">
             {m.pills_per_dose} {t("pills")}
             {!dose.schedule.box_slot ? ` · ${t(`food_${scheduleFood(dose.schedule, m)}`)}` : ""}
             {boxName ? ` · ${boxName}` : ""}{compartment ? ` · #${compartment}` : ""}
           </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             {dose.dueNow ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-pending px-3 py-1 font-semibold text-foreground">
                 <Clock className="size-4" aria-hidden /> {t("dueNow")}
@@ -134,9 +134,9 @@ export function DoseCard({
         </div>
       </div>
       {!compact && (
-        <div className="flex gap-2 sm:flex-col sm:items-end">
+        <div className="flex gap-2 md:flex-col md:items-end">
           {dose.status !== "taken" && onTake && (
-            <Button size="lg" variant="success" onClick={onTake} disabled={busy} className="flex-1 sm:flex-none">
+            <Button variant="success" onClick={onTake} disabled={busy} className="flex-1 md:flex-none">
               <Check aria-hidden /> {t("markTaken")}
             </Button>
           )}
@@ -159,18 +159,18 @@ export function StatTile({ label, value, tone }: { label: string; value: ReactNo
     primary: "bg-primary-soft text-accent-foreground",
   };
   return (
-    <div className={cn("rounded-2xl p-5", tones[tone])}>
-      <div className="text-4xl font-bold tabular-nums">{value}</div>
-      <div className="mt-1 text-base font-semibold">{label}</div>
+    <div className={cn("rounded-xl p-3 sm:p-4", tones[tone])}>
+      <div className="text-2xl font-bold tabular-nums sm:text-3xl">{value}</div>
+      <div className="mt-0.5 text-sm font-semibold">{label}</div>
     </div>
   );
 }
 
 export function EmptyState({ icon, title, action }: { icon: ReactNode; title: string; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-4 rounded-3xl border border-dashed bg-card/60 px-6 py-12 text-center">
-      <div className="grid size-16 place-items-center rounded-3xl bg-primary-soft text-primary">{icon}</div>
-      <p className="text-lg text-muted-foreground">{title}</p>
+    <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed bg-card/60 px-4 py-7 text-center sm:py-9">
+      <div className="grid size-12 place-items-center rounded-xl bg-primary-soft text-primary [&>svg]:size-6">{icon}</div>
+      <p className="text-base text-muted-foreground">{title}</p>
       {action}
     </div>
   );

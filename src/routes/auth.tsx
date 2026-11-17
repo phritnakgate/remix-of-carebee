@@ -28,8 +28,8 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const { t } = useI18n();
   return (
-    <main className="flex min-h-screen flex-col bg-hero">
-      <header className="flex items-center justify-between px-5 py-4 sm:px-8">
+    <main className="flex min-h-dvh flex-col bg-hero">
+      <header className="flex items-center justify-between px-3 py-3 sm:px-6">
         <Link to="/" className="flex items-center gap-3 font-bold">
           <span className="grid size-11 place-items-center rounded-2xl bg-brand text-primary-foreground">
             <Pill className="size-6" />
@@ -38,11 +38,11 @@ function AuthPage() {
         </Link>
         <LangSwitch />
       </header>
-      <div className="flex flex-1 items-center justify-center px-5 pb-16">
-        <div className="w-full max-w-md rounded-3xl border bg-card p-8 shadow-lift sm:p-10">
+      <div className="flex flex-1 items-center justify-center px-3 pb-10">
+        <div className="w-full max-w-sm rounded-2xl border bg-card p-5 shadow-lift sm:p-6">
           <h1 className="text-3xl font-bold">{t("signInTitle")}</h1>
-          <p className="mt-3 text-lg text-muted-foreground">{t("signInBody")}</p>
-          <GoogleButton className="mt-8" />
+          <p className="mt-2 text-base text-muted-foreground">{t("signInBody")}</p>
+          <GoogleButton className="mt-5" />
         </div>
       </div>
     </main>

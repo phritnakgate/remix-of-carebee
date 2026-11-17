@@ -81,7 +81,7 @@ function DevicesPage() {
   }
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-5 sm:space-y-6">
       <PageHeader
         title={t("devices")}
         body={t("devicesBody")}
@@ -184,7 +184,7 @@ function DeviceCard({
   const rotate = useServerFn(rotateDeviceKey);
 
   return (
-    <article className={cn("rounded-3xl border bg-card p-6 shadow-soft", isSim && "border-dashed border-sim sim-stripes")}>
+    <article className={cn("rounded-2xl border bg-card p-3.5 sm:p-4 shadow-soft", isSim && "border-dashed border-sim sim-stripes")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-2xl font-bold">{device.name}</h3>
@@ -210,13 +210,13 @@ function DeviceCard({
 
       {hasStatus ? (
         <>
-          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Indicator icon={<Lightbulb />} label={t("led")} value={status.led ? t(status.led as DictKey) : "—"} on={status.led === "on" || status.led === "blinking"} />
             <Indicator icon={<Bell />} label={t("buzzer")} value={status.buzzer ? t(status.buzzer as DictKey) : "—"} on={status.buzzer === "on"} />
             <Indicator icon={<Wifi />} label={t("wifi")} value={status.wifi_rssi != null ? `${status.wifi_rssi} dBm` : "—"} />
             <Indicator icon={<BatteryMedium />} label={t("battery")} value={status.battery != null ? `${status.battery}%` : "—"} />
           </div>
-          <h4 className="mt-6 text-lg font-bold">{t("compartments")}</h4>
+          <h4 className="mt-4 text-base font-bold">{t("compartments")}</h4>
           {status.compartments?.length ? (
             <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-8">
               {status.compartments.map((c) => (
@@ -245,7 +245,7 @@ function DeviceCard({
       {isSim && canManage && <SimulatorControls device={device} status={status} />}
       {!isSim && canManage && <MqttSetup deviceId={device.id} ownerId={device.owner_id} />}
 
-      <h4 className="mt-6 text-lg font-bold">{t("recentEvents")}</h4>
+      <h4 className="mt-4 text-base font-bold">{t("recentEvents")}</h4>
       {events.length === 0 ? (
         <p className="text-base text-muted-foreground">{t("noEvents")}</p>
       ) : (
@@ -266,7 +266,7 @@ function DeviceCard({
       )}
 
       {canManage && (
-        <div className="mt-6 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap gap-2">
           {!isSim && onNewKey && (
             <Button
               variant="soft"
@@ -429,7 +429,7 @@ function AddRealDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpe
             <Label htmlFor="dname" className="text-base font-semibold">
               {t("deviceName")}
             </Label>
-            <Input id="dname" required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} className="h-12 text-lg" />
+            <Input id="dname" required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} className="h-11 text-base" />
           </div>
           <DialogFooter>
             <Button type="submit" size="lg" disabled={busy}>

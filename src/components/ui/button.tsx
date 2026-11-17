@@ -22,11 +22,11 @@ const buttonVariants = cva(
         sim: "border border-dashed border-sim bg-sim-soft text-sim-foreground hover:bg-sim-soft/70",
       },
       size: {
-        default: "h-12 px-5",
-        sm: "h-10 rounded-lg px-4 text-sm",
-        lg: "h-14 rounded-2xl px-8 text-lg",
-        xl: "h-16 rounded-2xl px-8 text-xl",
-        icon: "h-12 w-12",
+        default: "h-11 px-4 text-sm",
+        sm: "h-11 rounded-lg px-3 text-sm sm:h-9",
+        lg: "h-11 px-5 text-base sm:h-12",
+        xl: "h-12 rounded-2xl px-6 text-lg sm:h-14",
+        icon: "size-11",
       },
     },
     defaultVariants: {

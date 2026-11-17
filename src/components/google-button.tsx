@@ -30,7 +30,7 @@ export function GoogleButton({ className }: { className?: string }) {
       disabled={busy}
       className={cn(
         // Google branding: light theme, fixed colors per Google's guidelines.
-        "inline-flex h-14 w-full items-center justify-center gap-[10px] rounded-2xl border border-[#747775] bg-[#FFFFFF] px-3 font-google text-base font-medium text-[#1F1F1F] transition-shadow hover:shadow-soft disabled:opacity-60",
+        "inline-flex h-11 w-full items-center justify-center gap-[10px] rounded-2xl border border-[#747775] bg-[#FFFFFF] px-3 font-google text-base font-medium text-[#1F1F1F] transition-shadow hover:shadow-soft disabled:opacity-60",
         className,
       )}
     >

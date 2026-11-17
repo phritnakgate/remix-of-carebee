@@ -50,7 +50,7 @@ function SchedulePage() {
   }
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-5 sm:space-y-6">
       <PageHeader title={t("schedule")} body={t("scheduleBody")} />
 
       {list.length === 0 ? (
@@ -59,7 +59,7 @@ function SchedulePage() {
         <>
           {/* Weekly overview */}
           <section className="overflow-x-auto rounded-3xl border bg-card shadow-soft">
-            <table className="w-full min-w-[44rem] border-collapse text-base">
+            <table className="w-full min-w-[36rem] border-collapse text-sm">
               <thead>
                 <tr>
                   <th className="w-32 p-3" />
@@ -104,7 +104,7 @@ function SchedulePage() {
             {list.map((s) => {
               const m = medById.get(s.medicine_id)!;
               return (
-                <article key={s.id} className="flex flex-col gap-4 rounded-3xl border bg-card p-5 shadow-soft lg:flex-row lg:items-center">
+                <article key={s.id} className="flex flex-col gap-3 rounded-2xl border bg-card p-3.5 sm:p-4 shadow-soft lg:flex-row lg:items-center">
                   <div className="flex flex-1 items-center gap-3">
                     <span className={cn("size-4 shrink-0 rounded-full", medColorClass[m.color])} />
                     <div>
@@ -121,7 +121,7 @@ function SchedulePage() {
                       type="time"
                       defaultValue={fmtTime(s.dose_time)}
                       onBlur={(e) => e.target.value && e.target.value !== fmtTime(s.dose_time) && update(s, { dose_time: e.target.value })}
-                      className="h-12 w-32 text-lg tabular-nums"
+                      className="h-11 w-28 text-base tabular-nums"
                     />
                   </label>
                   <div role="group" aria-label={t("days")} className="flex flex-wrap gap-1">

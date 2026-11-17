@@ -29,11 +29,11 @@ function HistoryPage() {
     <div>
       <PageHeader title={t("history")} />
       <Tabs defaultValue="daily">
-        <TabsList className="mb-6 h-14 rounded-2xl p-1">
-          <TabsTrigger value="daily" className="h-12 rounded-xl px-6 text-base font-semibold">
+        <TabsList className="mb-4 h-12 rounded-xl p-1">
+          <TabsTrigger value="daily" className="h-11 rounded-lg px-4 text-base font-semibold">
             {t("daily")}
           </TabsTrigger>
-          <TabsTrigger value="weekly" className="h-12 rounded-xl px-6 text-base font-semibold">
+          <TabsTrigger value="weekly" className="h-11 rounded-lg px-4 text-base font-semibold">
             {t("weekly")}
           </TabsTrigger>
         </TabsList>
@@ -108,7 +108,7 @@ function Weekly() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl border bg-card p-6 shadow-soft">
+      <section className="rounded-2xl border bg-card p-3.5 sm:p-4 shadow-soft">
         <h2 className="text-xl font-bold">{t("weekSummary")}</h2>
         <div className="mt-4 grid grid-cols-7 items-end gap-2 sm:gap-4" style={{ height: "14rem" }}>
           {dates.map((date) => {

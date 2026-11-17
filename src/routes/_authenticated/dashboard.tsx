@@ -42,15 +42,15 @@ function Dashboard() {
   const name = isOwn ? me?.display_name : ownerProfile?.display_name;
 
   return (
-    <div className="space-y-8">
-      <section className="overflow-hidden rounded-3xl bg-hero p-4 shadow-soft sm:p-6">
+    <div className="space-y-5 sm:space-y-6">
+      <section className="overflow-hidden rounded-2xl bg-hero p-3.5 shadow-soft sm:p-5">
         <p className="text-lg font-semibold text-muted-foreground">{longDate(now)}</p>
         <h1 className="mt-1 text-3xl font-bold sm:text-4xl">
           {greeting}
           {name ? `, ${name}` : ""}
         </h1>
         {next ? (
-          <div className="mt-6 flex flex-wrap items-center gap-4 rounded-2xl bg-card/80 p-5">
+          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-card/80 p-3">
             <div className="text-3xl font-bold tabular-nums text-primary sm:text-4xl">{fmtTime(next.schedule.dose_time)}</div>
             <div>
               <p className="text-base font-semibold text-muted-foreground">{t("nextDose")}</p>
@@ -64,19 +64,19 @@ function Dashboard() {
             </div>
           </div>
         ) : s.total > 0 ? (
-          <div className="mt-6 flex items-center gap-3 rounded-2xl bg-taken-soft p-5 text-xl font-bold text-taken-foreground">
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-taken-soft p-3 text-lg font-bold text-taken-foreground">
             <PartyPopper className="size-7" aria-hidden /> {t("allDone")}
           </div>
         ) : null}
         {s.total > 0 && (
-          <div className="mt-6">
+          <div className="mt-3">
             <div className="mb-2 flex justify-between text-base font-semibold">
               <span>{t("todayProgress")}</span>
               <span className="tabular-nums">
                 {s.taken}/{s.total}
               </span>
             </div>
-            <Progress value={(s.taken / s.total) * 100} className="h-4 bg-card" />
+            <Progress value={(s.taken / s.total) * 100} className="h-2.5 bg-card" />
           </div>
         )}
       </section>
@@ -88,8 +88,8 @@ function Dashboard() {
         <StatTile label={t("adherence")} value={s.adherence === null ? "—" : `${s.adherence}%`} tone="primary" />
       </section>
 
-      <div className="grid gap-8 lg:grid-cols-[1fr_20rem]">
-        <section>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]">
+        <section className="min-w-0">
           <h2 className="mb-4 text-2xl font-bold">{t("todaySchedule")}</h2>
           {isLoading ? (
             <p className="text-lg text-muted-foreground">{t("loading")}</p>

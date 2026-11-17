@@ -42,7 +42,7 @@ function BoxSwitcher({ className }: { className?: string }) {
     <div className={className}>
       <span className="mb-1 block text-sm font-semibold text-muted-foreground">{t("viewing")}</span>
       <Select value={ownerId} onValueChange={setOwnerId}>
-        <SelectTrigger className="h-12 rounded-xl text-base">
+        <SelectTrigger className="h-11 rounded-xl text-base">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -80,10 +80,10 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
           key={n.to}
           to={n.to}
           onClick={onNavigate}
-          className="flex h-14 items-center gap-4 rounded-2xl px-4 text-lg font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          className="flex min-h-11 items-center gap-3 rounded-xl px-3 py-1.5 text-sm font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
           activeProps={{ className: "bg-primary-soft !text-accent-foreground" }}
         >
-          <n.icon className="size-6" aria-hidden />
+          <n.icon className="size-5 shrink-0" aria-hidden />
           {t(n.label)}
         </Link>
       ))}
@@ -100,12 +100,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   useLiveUpdates([ownerId]);
 
   return (
-    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
+    <div className="min-h-dvh bg-background lg:grid lg:grid-cols-[14.5rem_minmax(0,1fr)]">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen flex-col gap-4 border-r bg-sidebar p-4 lg:flex">
+      <aside className="sticky top-0 hidden h-dvh flex-col gap-4 overflow-y-auto border-r bg-sidebar p-3 lg:flex">
         <Link to="/dashboard" className="flex items-center gap-3 px-2">
-          <span className="grid size-12 place-items-center rounded-2xl bg-brand text-primary-foreground">
-            <Pill className="size-6" aria-hidden />
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand text-primary-foreground">
+            <Pill className="size-5" aria-hidden />
           </span>
           <span className="text-lg font-bold leading-tight">{t("appName")}</span>
         </Link>
@@ -123,7 +123,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex min-h-screen min-w-0 flex-col">
+      <div className="flex min-h-dvh min-w-0 flex-col">
         {/* Mobile top bar */}
         <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b bg-card/90 px-4 py-2 backdrop-blur lg:hidden">
           <Link to="/dashboard" className="flex items-center gap-2">
@@ -142,7 +142,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        <main className="mx-auto w-full max-w-7xl flex-1 px-3 pb-24 pt-4 sm:px-6 sm:pt-7 lg:pb-12">{children}</main>
+        <main className="mx-auto w-full flex-1 px-3 pb-[calc(4.75rem+env(safe-area-inset-bottom))] pt-4 sm:px-5 sm:pt-5 lg:px-7 lg:pb-10 2xl:px-9">{children}</main>
 
         {/* Mobile bottom nav */}
         <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
@@ -150,7 +150,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link
               key={n.to}
               to={n.to}
-              className="flex h-16 flex-col items-center justify-center gap-1 text-xs font-semibold text-muted-foreground"
+              className="flex h-14 flex-col items-center justify-center gap-1 text-xs font-semibold text-muted-foreground"
               activeProps={{ className: "!text-primary" }}
             >
               <n.icon className="size-5" aria-hidden />
@@ -161,7 +161,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             type="button"
             onClick={() => setMoreOpen(true)}
             className={cn(
-              "flex h-16 flex-col items-center justify-center gap-1 text-xs font-semibold text-muted-foreground",
+              "flex h-14 flex-col items-center justify-center gap-1 text-xs font-semibold text-muted-foreground",
               ["/devices", "/caregiver", "/settings"].includes(pathname) && "text-primary",
             )}
           >
@@ -171,17 +171,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
-          <SheetContent side="bottom" className="rounded-t-3xl pb-10">
+          <SheetContent side="bottom" className="max-h-[88dvh] overflow-y-auto rounded-t-2xl px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4">
             <SheetHeader>
               <SheetTitle className="text-2xl">{t("navMore")}</SheetTitle>
             </SheetHeader>
-            <div className="flex flex-col gap-4 px-4">
+            <div className="mt-2 flex flex-col gap-2">
               <BoxSwitcher />
               <NavLinks onNavigate={() => setMoreOpen(false)} />
               <button
                 type="button"
                 onClick={signOut}
-                className="flex h-14 items-center gap-4 rounded-2xl px-4 text-lg font-semibold text-muted-foreground hover:bg-accent"
+                className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold text-muted-foreground hover:bg-accent"
               >
                 <LogOut className="size-6" aria-hidden /> {t("signOut")}
               </button>

@@ -95,26 +95,26 @@ function SettingsPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5 sm:space-y-6">
       <PageHeader title={t("settings")} />
 
       <ReminderDeveloperSettings userId={userId} />
 
-      <section className="rounded-3xl border bg-card p-6 shadow-soft">
+      <section className="rounded-2xl border bg-card p-3.5 sm:p-4 shadow-soft">
         <h2 className="text-xl font-bold">{t("profile")}</h2>
         <form onSubmit={saveProfile} className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="dn" className="text-base font-semibold">{t("displayName")}</Label>
-            <Input id="dn" maxLength={60} value={profile.display_name ?? ""} onChange={(e) => setProfile({ ...profile, display_name: e.target.value })} className="h-12 text-lg" />
+            <Input id="dn" maxLength={60} value={profile.display_name ?? ""} onChange={(e) => setProfile({ ...profile, display_name: e.target.value })} className="h-11 text-base" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="ph" className="text-base font-semibold">{t("phone")}</Label>
-            <Input id="ph" type="tel" maxLength={20} value={profile.phone ?? ""} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} className="h-12 text-lg" />
+            <Input id="ph" type="tel" maxLength={20} value={profile.phone ?? ""} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} className="h-11 text-base" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="tz" className="text-base font-semibold">{t("timezone")}</Label>
             <Select value={profile.timezone} onValueChange={(v) => setProfile({ ...profile, timezone: v })}>
-              <SelectTrigger id="tz" className="h-12 text-lg"><SelectValue /></SelectTrigger>
+              <SelectTrigger id="tz" className="h-11 text-base"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {TIMEZONES.map((z) => <SelectItem key={z} value={z}>{z}</SelectItem>)}
               </SelectContent>
@@ -130,7 +130,7 @@ function SettingsPage() {
         </form>
       </section>
 
-      <section className="rounded-3xl border bg-card p-6 shadow-soft">
+      <section className="rounded-2xl border bg-card p-3.5 sm:p-4 shadow-soft">
         <h2 className="text-xl font-bold">{t("inviteCaregiver")}</h2>
         <p className="mt-1 text-base text-muted-foreground">{t("inviteCaregiverBody")}</p>
         <Button className="mt-4" size="lg" variant="soft" onClick={createInvite}>
@@ -160,7 +160,7 @@ function SettingsPage() {
 function PeopleList({ title, people, onRemove }: { title: string; people: Profile[]; onRemove: (id: string) => void }) {
   const { t } = useI18n();
   return (
-    <section className="rounded-3xl border bg-card p-6 shadow-soft">
+    <section className="rounded-2xl border bg-card p-3.5 sm:p-4 shadow-soft">
       <h2 className="text-xl font-bold">{title}</h2>
       {people.length === 0 ? (
         <p className="mt-3 text-base text-muted-foreground">{t("none")}</p>
