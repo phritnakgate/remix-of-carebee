@@ -1,6 +1,18 @@
 # เปิดระบบยา 7 รอบใน Lovable
 
-ให้ส่งรายละเอียดด้านล่างให้ Lovable ในโปรเจกต์ CareBee remix เพื่อให้ Lovable สร้างและใช้ migration ตามโครงสร้างจริงของโปรเจกต์ แอปจะเปิดฟอร์ม 7 รอบเมื่อ `box_schedule_version()` คืน `1` เท่านั้น
+## งานแก้ต่อจาก migration ที่ Lovable สร้างแล้ว
+
+การทดสอบ `save_box_medicine` จาก migration `0000_enable_seven_box_medicine_rounds` ใน PostgreSQL จำลองพบ `42702 column reference "owner_id" is ambiguous` เมื่อเลือกกล่องจริง สาเหตุอยู่ที่ `d.owner_id = owner_id` ใน query ของ `public.devices` เพราะชื่อตัวแปรตรงกับชื่อคอลัมน์
+
+**ข้อความสำหรับ Lovable**
+
+> สร้าง migration ตามหลัง `0000_enable_seven_box_medicine_rounds` เพื่อแก้ `public.save_box_medicine(uuid, jsonb, jsonb)` ให้เปลี่ยนชื่อตัวแปร PL/pgSQL `owner_id` เป็น `v_owner_id` และแก้จุดอ้างถึงตัวแปรทั้งหมด คงชื่อคอลัมน์และคีย์ JSON `owner_id` เดิม รักษา RLS, `can_access`, trigger และข้อมูลเดิม ใช้ migration กับฐานข้อมูลของ remix แล้วทดสอบเพิ่มและแก้ยาโดยเลือกกล่องจริงของเจ้าของและบันทึกสองรอบเช้า/เย็นก่อนและหลังอาหาร ตรวจว่าเลือกกล่องของบัญชีอื่นไม่ได้
+
+หลังแก้ ให้ทดสอบจากหน้ากล่องด้วยบัญชีเจ้าของและกล่องทดลองก่อนนำไปใช้กับรายการจริง
+
+## สเปกเดิมสำหรับอ้างอิง
+
+แอปจะเปิดฟอร์ม 7 รอบเมื่อ `box_schedule_version()` คืน `1`
 
 ## ความสัมพันธ์
 

@@ -9,8 +9,7 @@ export function useBoxScheduleSupport() {
     queryKey: ["box-schedule-version"],
     staleTime: 60_000,
     queryFn: async () => {
-      // These RPCs appear in the generated types once Lovable applies the database change.
-      const { data, error } = await supabase.rpc("box_schedule_version" as never);
+      const { data, error } = await supabase.rpc("box_schedule_version");
       if (error?.code === "PGRST202" || error?.code === "42883") return false;
       if (error) throw error;
       return data === 1;
@@ -23,13 +22,11 @@ export async function saveBoxMedicine(input: {
   medicine: Database["public"]["Tables"]["medicines"]["Insert"] & { device_id: string | null };
   rounds: { box_slot: BoxSlot; dose_time: string }[];
 }) {
-  const { error } = await supabase.rpc(
-    "save_box_medicine" as never,
-    {
-      _medicine_id: input.medicineId ?? null,
-      _medicine: input.medicine,
-      _rounds: input.rounds,
-    } as never,
-  );
+  const { error } = await supabase.rpc("save_box_medicine", {
+    // The SQL uses NULL for a new medicine. The generated RPC type omits that case.
+    _medicine_id: (input.medicineId ?? null) as string,
+    _medicine: input.medicine,
+    _rounds: input.rounds,
+  });
   if (error) throw error;
 }

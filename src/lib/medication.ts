@@ -2,7 +2,8 @@
 import type { Database } from "@/integrations/supabase/types";
 
 export type Medicine = Database["public"]["Tables"]["medicines"]["Row"] & { device_id?: string | null };
-export type Schedule = Database["public"]["Tables"]["medication_schedules"]["Row"] & { box_slot?: BoxSlot | null; ends_on?: string | null };
+type ScheduleRow = Database["public"]["Tables"]["medication_schedules"]["Row"];
+export type Schedule = Omit<ScheduleRow, "box_slot" | "ends_on"> & { box_slot?: BoxSlot | null; ends_on?: string | null };
 export type DoseLog = Database["public"]["Tables"]["dose_logs"]["Row"];
 export type Device = Database["public"]["Tables"]["devices"]["Row"];
 export type DeviceEvent = Database["public"]["Tables"]["device_events"]["Row"];
@@ -29,6 +30,12 @@ export const BOX_ROUNDS = {
 
 export type BoxSlot = keyof typeof BOX_ROUNDS;
 export const BOX_SLOTS = Object.keys(BOX_ROUNDS) as BoxSlot[];
+
+export function readSchedule(row: ScheduleRow): Schedule {
+  const round = BOX_SLOTS.find((slot) => slot === row.box_slot);
+  if (row.box_slot != null && !round) throw new Error(`Unknown box slot: ${row.box_slot}`);
+  return { ...row, box_slot: round ?? null };
+}
 
 export function scheduleSlotLabel(schedule: Schedule) {
   return schedule.box_slot ? `round_${schedule.box_slot}` as const : `slot_${schedule.slot}` as const;

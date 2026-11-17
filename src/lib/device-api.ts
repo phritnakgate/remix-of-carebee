@@ -1,6 +1,6 @@
 // Helpers for the public ESP32 endpoints. Only call from server route handlers.
 import { hashDeviceKey } from "./device-keys";
-import { doseTargetsBox, scheduleCompartment, scheduleFood, type Medicine, type Schedule } from "./medication";
+import { doseTargetsBox, readSchedule, scheduleCompartment, scheduleFood, type Medicine } from "./medication";
 
 export const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -79,11 +79,11 @@ export async function todaysDoses(admin: Admin, ownerId: string, timeZone: strin
   const error = medicines.error ?? scheduleRows.error ?? confirmations.error;
   if (error) throw error;
   const meds: Medicine[] | null = medicines.data;
-  const schedules: Schedule[] | null = scheduleRows.data;
+  const schedules = scheduleRows.data?.map(readSchedule) ?? [];
   const logs = confirmations.data;
   const medById = new Map((meds ?? []).map((m) => [m.id, m]));
   const logBySchedule = new Map((logs ?? []).map((l) => [l.schedule_id, l]));
-  const doses = (schedules ?? [])
+  const doses = schedules
     .filter((s) => {
       if (s.ends_on && now.date >= s.ends_on) return false;
       const medicine = medById.get(s.medicine_id);

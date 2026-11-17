@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import {
   expandDoses,
+  readSchedule,
   toDateKey,
   type Device,
   type DeviceEvent,
@@ -52,7 +53,7 @@ export function useSchedules(ownerIds: string[]) {
         .in("owner_id", ownerIds)
         .order("dose_time");
       if (error) throw error;
-      return data;
+      return data.map(readSchedule);
     },
   });
 }
