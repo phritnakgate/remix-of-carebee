@@ -52,6 +52,23 @@ export function renderReminderTemplate(text: string, fields: Record<string, Json
   return JSON.stringify(resolve(JSON.parse(text) as Json));
 }
 
+export function scheduledReminderPayload(
+  message: Record<string, Json>,
+  sharedTemplate: string,
+  localTemplate: string,
+  customPayload: string,
+) {
+  for (const template of [sharedTemplate, localTemplate]) {
+    if (!template.trim()) continue;
+    try {
+      return renderReminderTemplate(template, { device_id: null, box_slot: null, ...message });
+    } catch {
+      // Keep delivery available when an older template can no longer be rendered.
+    }
+  }
+  return customPayload || JSON.stringify(message);
+}
+
 const templateKey = (boxId: string) => `carebee-reminder-template:${boxId}`;
 
 export function readReminderTemplate(boxId: string) {
@@ -60,9 +77,4 @@ export function readReminderTemplate(boxId: string) {
   } catch {
     return "";
   }
-}
-
-export function saveReminderTemplate(boxId: string, text: string) {
-  if (text.trim()) localStorage.setItem(templateKey(boxId), text);
-  else localStorage.removeItem(templateKey(boxId));
 }

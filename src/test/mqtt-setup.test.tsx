@@ -8,7 +8,7 @@ import { MqttSetup } from "@/components/mqtt-setup";
 import { mqttTestPayload } from "@/lib/mqtt";
 import { getMqttDue, forwardMqttSensor } from "@/lib/mqtt.functions";
 import { MqttSessionProvider, useMqttSession } from "@/lib/mqtt-session";
-import { saveReminderTemplate } from "@/lib/reminder-template";
+import { scheduledReminderPayload } from "@/lib/reminder-template";
 
 const { queryClient } = vi.hoisted(() => ({ queryClient: { invalidateQueries: vi.fn() } }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => queryClient }));
@@ -45,11 +45,21 @@ const dose = {
   taken: false,
   confirmed_at: null,
 };
-const due = (doses: (typeof dose)[]) => ({
+const due = (doses: (typeof dose)[], reminderTemplate = "") => ({
   date,
   timezone: "Asia/Bangkok",
   minute: Math.floor(Date.now() / 60000),
   doses,
+  reminderTemplate,
+});
+
+it("uses existing box payload settings when a shared template is missing or invalid", () => {
+  const message = { compartment: 1 };
+  expect(scheduledReminderPayload(message, "", '{"channel":"{{compartment}}"}', "legacy")).toBe(
+    '{"channel":1}',
+  );
+  expect(scheduledReminderPayload(message, '{"v":"{{unknown}}"}', "", "legacy")).toBe("legacy");
+  expect(scheduledReminderPayload(message, "", "", "")).toBe('{"compartment":1}');
 });
 
 function fixture() {
@@ -328,11 +338,13 @@ it("keeps MQTT on another CareBee page, sends the due dose once, and closes on p
       <p>Dashboard</p>
     </MqttSessionProvider>,
   );
-  saveReminderTemplate(
-    deviceId,
-    '{"time":"{{time}}","compartment":"{{compartment}}","schedule_id":"{{schedule_id}}","nested":{"label":"{{date}} · {{time}}"}}',
+  localStorage.setItem(`carebee-reminder-template:${deviceId}`, '{"legacy":true}');
+  vi.mocked(getMqttDue).mockImplementation(async () =>
+    due(
+      [dose],
+      '{"time":"{{time}}","compartment":"{{compartment}}","schedule_id":"{{schedule_id}}","nested":{"label":"{{date}} · {{time}}"}}',
+    ),
   );
-  vi.mocked(getMqttDue).mockImplementation(async () => due([dose]));
   if (typeof tick !== "function") throw new Error("MQTT schedule timer did not start");
   act(() => {
     tick();
@@ -340,7 +352,7 @@ it("keeps MQTT on another CareBee page, sends the due dose once, and closes on p
   await waitFor(() => expect(socket.publish).toHaveBeenCalledTimes(1));
   const [topic, payload] = socket.publish.mock.calls[0]!;
   expect(topic).toBe("medicine/schedule/" + deviceId);
-  expect(JSON.parse(payload)).toMatchObject({
+  expect(JSON.parse(payload)).toEqual({
     time: "16:00",
     compartment: 1,
     schedule_id: dose.schedule_id,

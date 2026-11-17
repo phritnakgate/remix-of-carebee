@@ -3,64 +3,28 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
 import { mqttPayloadLimit } from "@/lib/mqtt";
-import { useDevices } from "@/lib/queries";
 import {
-  readReminderTemplate,
   reminderPreview,
   reminderTemplateExample,
   renderReminderTemplate,
-  saveReminderTemplate,
 } from "@/lib/reminder-template";
 
-export function ReminderDeveloperSettings({ userId }: { userId: string }) {
+export function ReminderDeveloperSettings({
+  initialTemplate,
+  available,
+  onSave,
+}: {
+  initialTemplate: string;
+  available: boolean;
+  onSave: (template: string) => Promise<boolean>;
+}) {
   const { t } = useI18n();
-  const devices = useDevices(userId);
-  const boxes = (devices.data ?? []).filter((box) => box.mode === "real");
-  const [selected, setSelected] = useState("");
-  const box = boxes.find((candidate) => candidate.id === selected) ?? boxes[0];
-
-  return (
-    <details className="rounded-2xl border bg-card p-4 sm:p-5">
-      <summary className="cursor-pointer text-lg font-bold">{t("developerSettings")}</summary>
-      {box ? (
-        <div className="mt-3 space-y-3">
-          <Label htmlFor="developer-box">{t("medicineBox")}</Label>
-          <Select value={box.id} onValueChange={setSelected}>
-            <SelectTrigger id="developer-box" className="w-full sm:max-w-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {boxes.map((item) => (
-                <SelectItem key={item.id} value={item.id}>
-                  {item.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <TemplateEditor key={box.id} boxId={box.id} />
-        </div>
-      ) : (
-        <p className="mt-3 text-sm text-muted-foreground">
-          {t(devices.isPending ? "loading" : "hwNotConfiguredBody")}
-        </p>
-      )}
-    </details>
-  );
-}
-
-function TemplateEditor({ boxId }: { boxId: string }) {
-  const { t } = useI18n();
-  const [text, setText] = useState(() => readReminderTemplate(boxId));
+  const [text, setText] = useState(initialTemplate);
+  const [saved, setSaved] = useState(initialTemplate);
+  const [saving, setSaving] = useState(false);
   let preview = "";
   let invalid = false;
   if (text.trim()) {
@@ -74,18 +38,31 @@ function TemplateEditor({ boxId }: { boxId: string }) {
   return (
     <form
       className="space-y-3"
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault();
-        if (invalid) return;
+        if (invalid || !available || saving || text.trim() === saved) return;
+        setSaving(true);
         try {
-          saveReminderTemplate(boxId, text);
+          const template = text.trim();
+          if (!(await onSave(template))) {
+            toast.error(t("adminTemplateUnavailable"));
+            return;
+          }
+          setSaved(template);
           toast.success(t("saved"));
         } catch {
           toast.error(t("reminderTemplateSaveFailed"));
+        } finally {
+          setSaving(false);
         }
       }}
     >
       <p className="text-sm text-muted-foreground">{t("reminderTemplateHint")}</p>
+      {!available && (
+        <p role="status" className="text-sm text-destructive">
+          {t("adminTemplateUnavailable")}
+        </p>
+      )}
       <Label htmlFor="reminder-template">{t("reminderTemplate")}</Label>
       <Textarea
         id="reminder-template"
@@ -95,6 +72,7 @@ function TemplateEditor({ boxId }: { boxId: string }) {
         placeholder={reminderTemplateExample}
         onChange={(event) => setText(event.target.value)}
         aria-invalid={invalid}
+        disabled={saving}
       />
       {invalid && <p className="text-sm text-destructive">{t("reminderTemplateInvalid")}</p>}
       <details className="text-sm text-muted-foreground">
@@ -118,11 +96,16 @@ function TemplateEditor({ boxId }: { boxId: string }) {
         variant="outline"
         size="sm"
         onClick={() => setText(reminderTemplateExample)}
+        disabled={saving}
       >
         {t("reminderTemplateExample")}
       </Button>{" "}
-      <Button type="submit" size="sm" disabled={invalid}>
-        {t("save")}
+      <Button
+        type="submit"
+        size="sm"
+        disabled={invalid || !available || saving || text.trim() === saved}
+      >
+        {t(saving ? "loading" : "save")}
       </Button>
     </form>
   );

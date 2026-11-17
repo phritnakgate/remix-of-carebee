@@ -1,0 +1,35 @@
+# เปิดใช้หน้าจัดการ CareBee ใน Lovable
+
+## บัญชีผู้ดูแล
+
+1. ในระบบ Auth ของโปรเจกต์ CareBee ให้เปิดการลงชื่อเข้าใช้ด้วยอีเมลและรหัสผ่าน แล้วเตรียมบัญชีผู้ดูแลที่ยืนยันอีเมลเรียบร้อย
+2. ใน Lovable Secrets เพิ่ม `CAREBEE_ADMIN_USER_IDS` เป็น User ID (UUID จากหน้า Auth) ของบัญชีผู้ดูแล คั่นด้วยจุลภาคหากมีหลายบัญชี
+3. เปิด `/admin` ต่อท้าย URL ของ CareBee แล้วเข้าสู่ระบบด้วยอีเมลและรหัสผ่านบัญชีนั้น บัญชีผู้ใช้ทั่วไปจะผ่านการตรวจสิทธิ์เฉพาะเมื่อ UUID อยู่ในรายการและเซสชันมาจากการลงชื่อเข้าด้วยรหัสผ่าน
+
+หน้าแอดมินแก้ไขข้อมูลโปรไฟล์ (ชื่อ เบอร์โทร เขตเวลา) ข้อมูลกล่อง (ชื่อ) ข้อมูลยา (ชื่อ ยาคงเหลือ สถานะยา) และตารางทานยาที่ยังใช้งาน (เวลาและการเปิดแจ้งเตือน) ค้นจากรหัสรายการหรือรหัสเจ้าของได้
+
+## แม่แบบ MQTT
+
+ส่งคำขอนี้ให้ Lovable เพื่อสร้างตารางผ่าน migration ที่ Lovable จัดการ
+
+> Create `public.mqtt_reminder_templates` with a text primary key `id` constrained to the single value `default`, and a required text column `template` with character length between 1 and 4096. Enable RLS, grant SELECT, INSERT, UPDATE, DELETE to `service_role` and revoke access to this table from `anon`, `authenticated`, and `PUBLIC`. Do not create direct access policies for end-user roles. The CareBee server authorizes an administrator before updating the template, and returns the template to the owner of a verified real box only when a reminder is due. Preserve the existing authentication settings and tables.
+
+ใน `/admin` เปิดแท็บแม่แบบ JSON ใส่ JSON ที่กล่องต้องรับ ตรวจดูตัวอย่างผลลัพธ์ แล้วกดบันทึก ตัวอย่างส่งหมายเลขช่องเป็นตัวเลขและเวลาเป็นข้อความ
+
+```json
+{
+  "command": "remind",
+  "channel": "{{compartment}}",
+  "time": "{{time}}"
+}
+```
+
+แม่แบบกลางใช้กับการส่งแจ้งเตือนตามเวลาของกล่องจริงทุกใบผ่าน MQTT ที่เว็บเชื่อมต่ออยู่ ใช้ topic ตามค่าของแต่ละกล่อง การล้างแม่แบบแล้วกดบันทึกจะคืนค่าเดิมของแต่ละกล่อง
+
+## ตรวจหลังเปิดใช้งาน
+
+1. ลองเข้าจากบัญชีทั่วไปแล้วตรวจว่าหน้าแอดมินปฏิเสธการเข้าถึง
+2. ใช้บัญชีผู้ดูแลบันทึกแม่แบบตัวอย่าง รีโหลดและเข้าสู่ระบบใหม่ แล้วตรวจว่าแม่แบบเดิมปรากฏ
+3. ใช้กล่องและตารางทดสอบ เปิด MQTT จาก CareBee แล้ว subscribe topic ขาออกของกล่องใน MQTTX รอถึงเวลาที่ตั้งไว้และตรวจ JSON ที่ได้รับ
+
+อ้างอิงการตรวจเซสชันและวิธีลงชื่อเข้าใช้ [Supabase JWT Claims Reference](https://supabase.com/docs/guides/auth/jwt-fields).

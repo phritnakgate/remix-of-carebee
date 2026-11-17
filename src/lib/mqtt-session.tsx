@@ -26,7 +26,7 @@ import {
 } from "./mqtt";
 import { forwardMqttSensor, getMqttDue } from "./mqtt.functions";
 import { useDevices } from "./queries";
-import { readReminderTemplate, renderReminderTemplate } from "./reminder-template";
+import { readReminderTemplate, scheduledReminderPayload } from "./reminder-template";
 
 const openMqtt = createClientOnlyFn(
   async (settings: MqttSettings, onTransport: (socket: WebSocket) => void) => {
@@ -342,10 +342,12 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
                 timezone: due.timezone,
                 ...dose,
               };
-              const template = readReminderTemplate(deviceId);
-              const payload = template
-                ? renderReminderTemplate(template, { device_id: null, box_slot: null, ...message })
-                : settings.payload || JSON.stringify(message);
+              const payload = scheduledReminderPayload(
+                message,
+                due.reminderTemplate ?? "",
+                readReminderTemplate(deviceId),
+                settings.payload,
+              );
               if (!(await publishMessage(payload, false))) return;
               sent.add(dose.schedule_id);
               try {

@@ -2,11 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Copy, KeyRound, UserRound, X } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { LangSwitch } from "@/components/lang-switch";
-import { ReminderDeveloperSettings } from "@/components/reminder-developer-settings";
 import { PageHeader } from "@/components/med-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveBox, useLinks, type Profile } from "@/lib/active-box";
 import { useI18n } from "@/lib/i18n";
+import { profileTimezones } from "@/lib/profile";
+import { saveOwnProfile } from "@/lib/profile.functions";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -28,8 +29,6 @@ export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
 });
 
-const TIMEZONES = ["Asia/Bangkok", "Asia/Singapore", "Asia/Tokyo", "Europe/London", "America/New_York", "Australia/Sydney"];
-
 function makeCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const bytes = new Uint8Array(6);
@@ -42,10 +41,15 @@ function SettingsPage() {
   const { userId, me } = useActiveBox();
   const qc = useQueryClient();
   const links = useLinks(userId);
-  const [profile, setProfile] = useState<Pick<Profile, "display_name" | "phone" | "timezone">>({ display_name: "", phone: "", timezone: "Asia/Bangkok" });
-  useEffect(() => {
-    if (me) setProfile({ display_name: me.display_name ?? "", phone: me.phone ?? "", timezone: me.timezone });
-  }, [me]);
+  const [edits, setEdits] = useState<Partial<Pick<Profile, "display_name" | "phone" | "timezone">>>({});
+  const [saving, setSaving] = useState(false);
+  const profileLocked = saving || !links.data;
+  const profile = {
+    display_name: edits.display_name ?? me?.display_name ?? "",
+    phone: edits.phone ?? me?.phone ?? "",
+    timezone: edits.timezone ?? me?.timezone ?? "Asia/Bangkok",
+  };
+  const timezones = [...new Set([...profileTimezones, profile.timezone])];
 
   const invites = useQuery({
     queryKey: ["invites", userId],
@@ -63,16 +67,23 @@ function SettingsPage() {
 
   async function saveProfile(e: FormEvent) {
     e.preventDefault();
-    const { error } = await supabase
-      .from("profiles")
-      .update({ display_name: profile.display_name?.trim() || null, phone: profile.phone?.trim() || null, timezone: profile.timezone })
-      .eq("id", userId);
-    if (error) {
-      toast.error(error.message);
-      return;
+    if (profileLocked) return;
+    setSaving(true);
+    try {
+      const saved = await saveOwnProfile({ data: profile });
+      const queryKey = ["links", userId];
+      await qc.cancelQueries({ queryKey });
+      qc.setQueryData<typeof links.data>(queryKey, (current) =>
+        current ? { ...current, me: saved } : current,
+      );
+      await qc.invalidateQueries({ queryKey });
+      setEdits({});
+      toast.success(t("saved"));
+    } catch {
+      toast.error(t("profileSaveFailed"));
+    } finally {
+      setSaving(false);
     }
-    toast.success(t("saved"));
-    qc.invalidateQueries({ queryKey: ["links", userId] });
   }
 
   async function createInvite() {
@@ -98,25 +109,24 @@ function SettingsPage() {
     <div className="space-y-5 sm:space-y-6">
       <PageHeader title={t("settings")} />
 
-      <ReminderDeveloperSettings userId={userId} />
-
       <section className="rounded-2xl border bg-card p-3.5 sm:p-4 shadow-soft">
         <h2 className="text-xl font-bold">{t("profile")}</h2>
+        {links.isError && !links.data && <p role="alert" className="mt-2 text-sm text-destructive">{t("profileLoadFailed")}</p>}
         <form onSubmit={saveProfile} className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="dn" className="text-base font-semibold">{t("displayName")}</Label>
-            <Input id="dn" maxLength={60} value={profile.display_name ?? ""} onChange={(e) => setProfile({ ...profile, display_name: e.target.value })} className="h-11 text-base" />
+            <Input id="dn" maxLength={60} value={profile.display_name} disabled={profileLocked} onChange={(e) => setEdits({ ...edits, display_name: e.target.value })} className="h-11 text-base" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="ph" className="text-base font-semibold">{t("phone")}</Label>
-            <Input id="ph" type="tel" maxLength={20} value={profile.phone ?? ""} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} className="h-11 text-base" />
+            <Input id="ph" type="tel" maxLength={20} value={profile.phone} disabled={profileLocked} onChange={(e) => setEdits({ ...edits, phone: e.target.value })} className="h-11 text-base" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="tz" className="text-base font-semibold">{t("timezone")}</Label>
-            <Select value={profile.timezone} onValueChange={(v) => setProfile({ ...profile, timezone: v })}>
+            <Select value={profile.timezone} disabled={profileLocked} onValueChange={(v) => setEdits({ ...edits, timezone: v })}>
               <SelectTrigger id="tz" className="h-11 text-base"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {TIMEZONES.map((z) => <SelectItem key={z} value={z}>{z}</SelectItem>)}
+                {timezones.map((z) => <SelectItem key={z} value={z}>{z}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -125,7 +135,7 @@ function SettingsPage() {
             <LangSwitch />
           </div>
           <div className="sm:col-span-2">
-            <Button type="submit" size="lg">{t("save")}</Button>
+            <Button type="submit" disabled={profileLocked}>{t(saving ? "loading" : "save")}</Button>
           </div>
         </form>
       </section>

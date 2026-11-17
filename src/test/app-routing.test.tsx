@@ -14,4 +14,13 @@ describe("App routing", () => {
 
     expect(matches.at(-1)?.routeId).not.toBe(rootRouteId);
   });
+
+  it("mounts the admin entrance outside the normal app session routes", () => {
+    const router = createRouter({ routeTree, context: { queryClient: new QueryClient() } });
+
+    expect(router.matchRoutes("/admin").map((match) => match.routeId)).toEqual([
+      rootRouteId,
+      "/admin",
+    ]);
+  });
 });

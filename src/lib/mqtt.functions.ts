@@ -31,13 +31,24 @@ export const getMqttDue = createServerFn({ method: "GET" })
     const { timeToMinutes, todaysDoses } = await import("./device-api");
     const at = new Date();
     const { now, doses } = await todaysDoses(supabase, userId, timezone, device.id, at);
+    const due = doses.filter(
+      (dose) => dose.reminder && !dose.taken && timeToMinutes(dose.time) === now.minutes,
+    );
+    let reminderTemplate = "";
+    if (due.length) {
+      try {
+        const { readSharedReminderTemplate } = await import("./reminder-template.server");
+        reminderTemplate = (await readSharedReminderTemplate()).template;
+      } catch {
+        // A template lookup failure must not block the scheduled reminder.
+      }
+    }
     return {
       date: now.date,
       timezone,
       minute: Math.floor(at.getTime() / 60000),
-      doses: doses.filter(
-        (dose) => dose.reminder && !dose.taken && timeToMinutes(dose.time) === now.minutes,
-      ),
+      doses: due,
+      reminderTemplate,
     };
   });
 
