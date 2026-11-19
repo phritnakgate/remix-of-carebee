@@ -113,6 +113,18 @@ it("rejects a mismatched box or an invalid compartment without writing status", 
   expect(db.write).not.toHaveBeenCalled();
 });
 
+it("accepts an API sensor report without a browser-supplied box ID", async () => {
+  expect(
+    (await receiveMqttStatus(request({ type: "load_cell", compartment: 1, weight_g: 12.4 }))).ok,
+  ).toBe(true);
+  expect(db.state.load_cells?.["1"]?.weight_g).toBe(12.4);
+  const invalid = new Request("https://carebee.invalid/device/sensor", {
+    method: "POST",
+    body: "{",
+  });
+  expect((await receiveMqttStatus(invalid)).status).toBe(400);
+});
+
 it("accepts a single load cell for the whole box when configured", async () => {
   vi.mocked(readSharedTemplate).mockResolvedValue({
     available: true,

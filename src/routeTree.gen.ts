@@ -20,8 +20,10 @@ import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedMedicinesRouteImport } from './routes/_authenticated/medicines'
 import { Route as AuthenticatedScheduleRouteImport } from './routes/_authenticated/schedule'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as ApiJobsMqttRouteImport } from './routes/api/jobs/mqtt'
 import { Route as ApiPublicDeviceConfirmRouteImport } from './routes/api/public/device/confirm'
 import { Route as ApiPublicDeviceScheduleRouteImport } from './routes/api/public/device/schedule'
+import { Route as ApiPublicDeviceSensorRouteImport } from './routes/api/public/device/sensor'
 import { Route as ApiPublicDeviceStatusRouteImport } from './routes/api/public/device/status'
 
 const IndexRoute = IndexRouteImport.update({
@@ -78,6 +80,11 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiJobsMqttRoute = ApiJobsMqttRouteImport.update({
+  id: '/api/jobs/mqtt',
+  path: '/api/jobs/mqtt',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicDeviceConfirmRoute = ApiPublicDeviceConfirmRouteImport.update({
   id: '/api/public/device/confirm',
   path: '/api/public/device/confirm',
@@ -86,6 +93,11 @@ const ApiPublicDeviceConfirmRoute = ApiPublicDeviceConfirmRouteImport.update({
 const ApiPublicDeviceScheduleRoute = ApiPublicDeviceScheduleRouteImport.update({
   id: '/api/public/device/schedule',
   path: '/api/public/device/schedule',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicDeviceSensorRoute = ApiPublicDeviceSensorRouteImport.update({
+  id: '/api/public/device/sensor',
+  path: '/api/public/device/sensor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicDeviceStatusRoute = ApiPublicDeviceStatusRouteImport.update({
@@ -105,8 +117,10 @@ export interface FileRoutesByFullPath {
   '/medicines': typeof AuthenticatedMedicinesRoute
   '/schedule': typeof AuthenticatedScheduleRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/api/jobs/mqtt': typeof ApiJobsMqttRoute
   '/api/public/device/confirm': typeof ApiPublicDeviceConfirmRoute
   '/api/public/device/schedule': typeof ApiPublicDeviceScheduleRoute
+  '/api/public/device/sensor': typeof ApiPublicDeviceSensorRoute
   '/api/public/device/status': typeof ApiPublicDeviceStatusRoute
 }
 export interface FileRoutesByTo {
@@ -120,8 +134,10 @@ export interface FileRoutesByTo {
   '/medicines': typeof AuthenticatedMedicinesRoute
   '/schedule': typeof AuthenticatedScheduleRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/api/jobs/mqtt': typeof ApiJobsMqttRoute
   '/api/public/device/confirm': typeof ApiPublicDeviceConfirmRoute
   '/api/public/device/schedule': typeof ApiPublicDeviceScheduleRoute
+  '/api/public/device/sensor': typeof ApiPublicDeviceSensorRoute
   '/api/public/device/status': typeof ApiPublicDeviceStatusRoute
 }
 export interface FileRoutesById {
@@ -137,8 +153,10 @@ export interface FileRoutesById {
   '/_authenticated/medicines': typeof AuthenticatedMedicinesRoute
   '/_authenticated/schedule': typeof AuthenticatedScheduleRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/api/jobs/mqtt': typeof ApiJobsMqttRoute
   '/api/public/device/confirm': typeof ApiPublicDeviceConfirmRoute
   '/api/public/device/schedule': typeof ApiPublicDeviceScheduleRoute
+  '/api/public/device/sensor': typeof ApiPublicDeviceSensorRoute
   '/api/public/device/status': typeof ApiPublicDeviceStatusRoute
 }
 export interface FileRouteTypes {
@@ -154,8 +172,10 @@ export interface FileRouteTypes {
     | '/medicines'
     | '/schedule'
     | '/settings'
+    | '/api/jobs/mqtt'
     | '/api/public/device/confirm'
     | '/api/public/device/schedule'
+    | '/api/public/device/sensor'
     | '/api/public/device/status'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -169,8 +189,10 @@ export interface FileRouteTypes {
     | '/medicines'
     | '/schedule'
     | '/settings'
+    | '/api/jobs/mqtt'
     | '/api/public/device/confirm'
     | '/api/public/device/schedule'
+    | '/api/public/device/sensor'
     | '/api/public/device/status'
   id:
     | '__root__'
@@ -185,8 +207,10 @@ export interface FileRouteTypes {
     | '/_authenticated/medicines'
     | '/_authenticated/schedule'
     | '/_authenticated/settings'
+    | '/api/jobs/mqtt'
     | '/api/public/device/confirm'
     | '/api/public/device/schedule'
+    | '/api/public/device/sensor'
     | '/api/public/device/status'
   fileRoutesById: FileRoutesById
 }
@@ -195,8 +219,10 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AdminRoute: typeof AdminRoute
   AuthRoute: typeof AuthRoute
+  ApiJobsMqttRoute: typeof ApiJobsMqttRoute
   ApiPublicDeviceConfirmRoute: typeof ApiPublicDeviceConfirmRoute
   ApiPublicDeviceScheduleRoute: typeof ApiPublicDeviceScheduleRoute
+  ApiPublicDeviceSensorRoute: typeof ApiPublicDeviceSensorRoute
   ApiPublicDeviceStatusRoute: typeof ApiPublicDeviceStatusRoute
 }
 
@@ -279,6 +305,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/jobs/mqtt': {
+      id: '/api/jobs/mqtt'
+      path: '/api/jobs/mqtt'
+      fullPath: '/api/jobs/mqtt'
+      preLoaderRoute: typeof ApiJobsMqttRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/device/confirm': {
       id: '/api/public/device/confirm'
       path: '/api/public/device/confirm'
@@ -291,6 +324,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/device/schedule'
       fullPath: '/api/public/device/schedule'
       preLoaderRoute: typeof ApiPublicDeviceScheduleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/device/sensor': {
+      id: '/api/public/device/sensor'
+      path: '/api/public/device/sensor'
+      fullPath: '/api/public/device/sensor'
+      preLoaderRoute: typeof ApiPublicDeviceSensorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/device/status': {
@@ -331,8 +371,10 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AdminRoute: AdminRoute,
   AuthRoute: AuthRoute,
+  ApiJobsMqttRoute: ApiJobsMqttRoute,
   ApiPublicDeviceConfirmRoute: ApiPublicDeviceConfirmRoute,
   ApiPublicDeviceScheduleRoute: ApiPublicDeviceScheduleRoute,
+  ApiPublicDeviceSensorRoute: ApiPublicDeviceSensorRoute,
   ApiPublicDeviceStatusRoute: ApiPublicDeviceStatusRoute,
 }
 export const routeTree = rootRouteImport

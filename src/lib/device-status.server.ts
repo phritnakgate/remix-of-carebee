@@ -65,12 +65,12 @@ function applyStandardStatus(auth: DeviceAuth, body: unknown) {
 
 export async function receiveMqttStatus(
   request: Request,
-  expectedDeviceId: string,
+  expectedDeviceId?: string,
   legacyStatus?: Record<string, unknown>,
 ) {
   const auth = await authenticateDevice(request);
   if ("error" in auth) return auth.error;
-  if (auth.device.id !== expectedDeviceId) {
+  if (expectedDeviceId && auth.device.id !== expectedDeviceId) {
     return json({ error: "Device key does not match the box" }, 403);
   }
 
@@ -81,7 +81,14 @@ export async function receiveMqttStatus(
   } catch {
     // ESP32 devices can still send the standard format if the shared settings are unavailable.
   }
-  const payload: unknown = await request.json();
+  let payload: unknown;
+  try {
+    const text = await request.text();
+    if (text.length > 8192) return json({ error: "Sensor report is too large" }, 413);
+    payload = JSON.parse(text);
+  } catch {
+    return json({ error: "Body must be JSON" }, 400);
+  }
   if (!isLoadCellReport(payload, template) && legacyStatus !== undefined) {
     return applyStandardStatus(auth, legacyStatus);
   }

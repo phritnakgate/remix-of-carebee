@@ -2,6 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { MqttTrafficPanel } from "@/components/mqtt-traffic";
+import { MqttBackground } from "@/components/mqtt-background";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -248,6 +249,8 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
         )}
       </form>
 
+      <MqttBackground deviceId={deviceId} settings={settings} open={open} />
+
       <details className="mt-4 text-sm text-muted-foreground">
         <summary className="cursor-pointer font-medium">{t("mqttEsp32Instructions")}</summary>
         <p className="mt-2">{t("mqttSensorHint")}</p>
@@ -259,6 +262,10 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
         <p className="mt-2">{t("mqttConfirmHint")}</p>
         <pre className="mt-2 overflow-x-auto rounded-lg bg-muted p-3">
           {'{"device_key":"smrb_…","schedule_id":"…","scheduled_date":"YYYY-MM-DD"}'}
+        </pre>
+        <p className="mt-3">{t("mqttSensorApiHint")}</p>
+        <pre className="mt-2 overflow-x-auto rounded-lg bg-muted p-3">
+          {'POST /api/public/device/sensor\nContent-Type: application/json\nX-Device-Key: <device-key>\n\n{"type":"load_cell","compartment":1,"weight_g":12.4}'}
         </pre>
       </details>
     </details>

@@ -20,6 +20,8 @@ export const getMqttDue = createServerFn({ method: "GET" })
       .maybeSingle();
     if (error) throw error;
     if (!device) return null;
+    const { backgroundEnabled } = await import("./mqtt-background.server");
+    const background = await backgroundEnabled(device.id);
 
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
@@ -34,6 +36,7 @@ export const getMqttDue = createServerFn({ method: "GET" })
     const due = doses.filter(
       (dose) => dose.reminder && !dose.taken && timeToMinutes(dose.time) === now.minutes,
     );
+    if (background) due.length = 0;
     let reminderTemplate = "";
     if (due.length) {
       try {

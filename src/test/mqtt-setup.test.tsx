@@ -10,6 +10,8 @@ import { getMqttDue, forwardMqttSensor } from "@/lib/mqtt.functions";
 import { MqttSessionProvider, useMqttSession } from "@/lib/mqtt-session";
 import { scheduledReminderPayload } from "@/lib/reminder-template";
 
+vi.mock("@/components/mqtt-background", () => ({ MqttBackground: () => null }));
+
 const { queryClient } = vi.hoisted(() => ({ queryClient: { invalidateQueries: vi.fn() } }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => queryClient }));
 
