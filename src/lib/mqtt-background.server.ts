@@ -31,8 +31,8 @@ type BackgroundDatabase = {
           last_tick_at: string | null;
           last_run_at: string | null;
         };
-        Insert: never;
-        Update: { last_run_at?: string };
+        Insert: { id: string; token_hash: string };
+        Update: { last_run_at?: string; last_tick_at?: string };
         Relationships: [];
       };
     };

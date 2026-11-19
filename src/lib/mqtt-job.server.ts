@@ -7,43 +7,87 @@ import { boxTopic, mqttPayloadLimit } from "./mqtt";
 import { scheduledReminderPayload } from "./reminder-template";
 import { readSharedTemplate } from "./reminder-template.server";
 import { withMqttPublisher } from "./mqtt-publish.server";
+import { authenticateCronRequest } from "@/integrations/supabase/cron-auth";
 
-export async function runMqttJob(request: Request) {
+export async function runMqttJob(request: Request, defer?: (task: Promise<unknown>) => void) {
   const token = /^Bearer ([^\s,]+)$/.exec(request.headers.get("authorization") ?? "")?.[1];
   if (!token || token.length > 256)
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   const db = backgroundDb();
-  const state = await db
-    .from("mqtt_job_state")
-    .select("token_hash")
-    .eq("id", "default")
-    .maybeSingle();
-  if (state.error || !state.data)
-    return Response.json({ error: "Job is not configured" }, { status: 503 });
-  const provided = await hashDeviceKey(token);
-  const expected = state.data.token_hash;
-  if (
-    provided.length !== expected.length ||
-    !timingSafeEqual(Buffer.from(provided), Buffer.from(expected))
-  ) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const managedAuth = await authenticateCronRequest(request);
+  if (managedAuth === null) {
+    const initialized = await db
+      .from("mqtt_job_state")
+      .upsert({ id: "default", token_hash: "" }, { onConflict: "id", ignoreDuplicates: true });
+    if (initialized.error)
+      return Response.json({ error: "Job storage is not configured" }, { status: 503 });
+  } else {
+    // Continue to support installations using an existing SQL or external scheduler.
+    const state = await db
+      .from("mqtt_job_state")
+      .select("token_hash")
+      .eq("id", "default")
+      .maybeSingle();
+    if (state.error)
+      return Response.json({ error: "Job storage is not configured" }, { status: 503 });
+    const provided = await hashDeviceKey(token);
+    const expected = state.data?.token_hash ?? "";
+    if (
+      !expected ||
+      provided.length !== expected.length ||
+      !timingSafeEqual(Buffer.from(provided), Buffer.from(expected))
+    ) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
 
-  const due = await db.rpc("mqtt_due_boxes", {});
-  if (due.error) return Response.json({ error: "Could not read due reminders" }, { status: 503 });
   const heartbeat = await db
     .from("mqtt_job_state")
-    .update({ last_run_at: new Date().toISOString() })
+    .update({ last_tick_at: new Date().toISOString() })
     .eq("id", "default");
   if (heartbeat.error)
     return Response.json({ error: "Could not update job status" }, { status: 503 });
+  const due = await db.rpc("mqtt_due_boxes", {});
+  if (due.error) return Response.json({ error: "Could not read due reminders" }, { status: 503 });
+  if (!due.data?.length) {
+    return Response.json(
+      { ok: true, sent: 0, failed: 0, deferred: 0 },
+      {
+        headers: { "Cache-Control": "no-store" },
+      },
+    );
+  }
+  if (defer) {
+    defer(
+      deliverDueBoxes(due.data).catch(() => {
+        console.error("Background MQTT job failed. Check delivery status.");
+      }),
+    );
+    return Response.json(
+      { ok: true, queued: due.data.length },
+      {
+        status: 202,
+        headers: { "Cache-Control": "no-store" },
+      },
+    );
+  }
+  return deliverDueBoxes(due.data);
+}
+
+async function deliverDueBoxes(devices: { device_id: string }[]) {
+  const db = backgroundDb();
+  const running = await db
+    .from("mqtt_job_state")
+    .update({ last_run_at: new Date().toISOString() })
+    .eq("id", "default");
+  if (running.error)
+    return Response.json({ error: "Could not update sender status" }, { status: 503 });
 
   const shared = await readSharedTemplate("reminder").catch(() => ({ template: "" }));
-  const deadline = Date.now() + 23000;
+  const deadline = Date.now() + 17000;
   let cursor = 0;
   let sent = 0;
   let failed = 0;
-  const devices = due.data ?? [];
   async function worker() {
     while (cursor < devices.length && Date.now() < deadline) {
       const box = devices[cursor++];

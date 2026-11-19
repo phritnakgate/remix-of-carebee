@@ -5,18 +5,23 @@
 โค้ด CareBee มีตัวส่งที่ `POST /api/jobs/mqtt` และตัวรับ Load Cell ที่ `POST /api/public/device/sensor`
 
 1. ให้ Lovable ใช้ [SQL เปิดระบบ](sql/enable-mqtt-background.sql) ใน migration ใหม่ของ CareBee remix หรือรันใน **Database → Manage → SQL editor** ของ remix
-2. รอ Lovable ซิงก์และเผยแพร่โค้ดล่าสุด ตรวจว่า URL ใน [SQL ตั้งเวลา](sql/activate-mqtt-background.sql) ตรงกับเว็บที่เผยแพร่จริง ปัจจุบันตั้งเป็น `https://carebee-copy.lovable.app`
-3. รัน SQL ตั้งเวลาในฐานข้อมูลเดียวกัน สคริปต์สร้างโทเคนแบบสุ่ม เก็บใน Vault และบันทึกเฉพาะแฮชไว้ให้ตัวส่งตรวจสอบ การเรียกซ้ำใช้ชื่อ job เดิม
+2. รอ Lovable ซิงก์และเผยแพร่โค้ดล่าสุด [SQL เตรียมสถานะ](sql/activate-mqtt-background.sql) รันได้เพื่อเตรียมแถวสถานะ ซึ่งตัว job ก็สร้างให้ได้เองเมื่อเรียกครั้งแรก
+3. ส่งข้อความต่อไปนี้ให้ Lovable ในโปรเจกต์ CareBee remix เพื่อสร้าง **managed Job** จากระบบของ Lovable
+
+> สร้าง managed scheduled job ชื่อ carebee-mqtt-reminders ให้ส่ง POST ไปที่ API route /api/jobs/mqtt ของเว็บที่เผยแพร่จริง ทุกนาทีด้วย cron * * * * * ใช้ LOVABLE_CRON_SECRET ที่ Lovable จัดการให้ โดยโค้ดมี authenticateCronRequest รองรับแล้ว และใช้ Cloudflare waitUntil เพื่อส่ง MQTT หลังตอบรับงานแล้ว ใช้โค้ดและตาราง mqtt_background_configs, mqtt_deliveries, mqtt_job_state ที่มีอยู่ ให้ตรวจผ่าน More → Database → Manage → Jobs ว่า job ถูกสร้างและทำงานได้ หากมี job ชื่อเดียวกันให้ใช้เพียงรายการเดียว
+
 4. เปิดเว็บ เข้าสู่ระบบ แล้วไป **กล่องยา → การตั้งค่า ESP32 · MQTT → แจ้งเตือนเมื่อปิดเว็บ** รอข้อความ **ตัวตั้งเวลาเบื้องหลังทำงานอยู่** ซึ่งอาจใช้ถึงหนึ่งนาที
 5. เลือก HiveMQ หรือ EMQX ให้ตรงกับ ESP32 ตรวจ topic และ payload แล้วกด **เปิดใช้ด้วยการตั้งค่านี้** ระบบเริ่มจากรอบถัดไปที่ตั้งหลังเวลาเปิดใช้
 
 การตั้งค่า broker และ payload ของงานเบื้องหลังถูกบันทึกในฐานข้อมูล ต้องกด **อัปเดตการตั้งค่าเบื้องหลัง** หลังแก้ค่า ปุ่ม **ตัดการเชื่อมต่อ** หยุดการเชื่อมต่อของแท็บ หากต้องการยกเลิกการส่งตอนปิดเว็บ ให้กด **หยุดแจ้งเตือนเบื้องหลัง**
 
-SQL ที่รันตรงจาก editor จะเปลี่ยนฐานข้อมูลนั้น เมื่อให้ Lovable จัดการ migration ภายหลัง ให้นำไฟล์เหล่านี้ไปบันทึกในประวัติ migration ด้วย
+SQL ที่รันตรงจาก editor จะเปลี่ยนฐานข้อมูลนั้น เมื่อให้ Lovable จัดการ migration ภายหลัง ให้นำไฟล์เปิดตารางไปบันทึกในประวัติ migration ด้วย ฐานข้อมูลของ CareBee ที่ตรวจพบมี pgcrypto และ supabase_vault ส่วน pg_cron และ pg_net ยังไม่มี จึงใช้ managed Job ของ Lovable สำหรับตั้งเวลา
 
 ## วิธีทำงาน
 
-ฐานข้อมูลตรวจเฉพาะรายการถึงเวลาทุกนาที ถ้าไม่มีงานจะจบโดยไม่เรียกเว็บหรือ MQTT ถ้ามีงานจะเรียกตัวส่งที่ตรวจโทเคน เชื่อม broker ด้วย WSS ส่ง QoS 1 แล้วปิดการเชื่อมต่อ ESP32 ยังคงเชื่อม broker เดียวกันผ่าน TCP 1883 และ subscribe topic `medicine/schedule/{box-id}`
+Lovable เรียกตัวตรวจทุกนาที ตัวตรวจยืนยัน credential ของ job แล้วอ่านรายการถึงเวลาจากฐานข้อมูล ถ้าไม่มีงานจะตอบกลับทันที ถ้ามีงานจะตอบ 202 เพื่อรับงานและส่งต่อให้การทำงานเบื้องหลังด้วย Cloudflare waitUntil ตัวส่งจึงเชื่อม broker ด้วย WSS ส่ง QoS 1 แล้วปิดการเชื่อมต่อ ESP32 ยังคงเชื่อม broker เดียวกันผ่าน TCP 1883 และ subscribe topic `medicine/schedule/{box-id}`
+
+แนวทางนี้เรียก API ทุกนาทีเพื่อเช็กงาน และมีค่า Cloud usage ตามการเรียกจริง ส่วน MQTT จะเชื่อมเฉพาะเมื่อมีงาน
 
 เวลาใช้ timezone เจ้าของยา รองรับวันทานยา การปิดแจ้งเตือน ยาที่หยุดใช้ และวันสิ้นสุดตาราง ตรวจยืนยันการทานยาก่อนส่ง งานนี้บันทึกเฉพาะประวัติการส่งใน `mqtt_deliveries`
 
@@ -63,11 +68,10 @@ X-Device-Key: <คีย์ลับของกล่องนั้น>
 
 ```sql
 SELECT last_tick_at, last_run_at FROM public.mqtt_job_state WHERE id = 'default';
-SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'carebee-mqtt-reminders';
 SELECT device_id, schedule_id, scheduled_date, status, attempts, sent_at
 FROM public.mqtt_deliveries ORDER BY scheduled_date DESC LIMIT 30;
 ```
 
-`last_tick_at` ควรขยับทุกนาที ส่วน `last_run_at` จะขยับเมื่อมีงานที่ต้องส่ง หาก timer ขยับแต่ตัวส่งไม่เริ่ม ให้ตรวจ URL, HTTP status ใน `net._http_response` และ Logs ของเว็บ
+`last_tick_at` ควรขยับทุกนาที ส่วน `last_run_at` จะขยับเมื่อมีงานที่ต้องส่ง ตรวจ job และประวัติการเรียกที่ **More → Database → Manage → Jobs** หาก job ตอบ 202 ให้ตรวจผลส่งจริงจาก `mqtt_deliveries` และเวลาที่ broker ยืนยันในหน้ากล่อง
 
-รายละเอียดการตั้งเวลาอ้างอิง [Supabase Cron](https://supabase.com/docs/guides/cron) และ [การเรียก HTTP จากงานตั้งเวลา](https://supabase.com/docs/guides/functions/schedule-functions)
+รายละเอียดอ้างอิง [Jobs ของ Lovable](https://docs.lovable.dev/features/jobs) และ [Cloudflare waitUntil](https://developers.cloudflare.com/workers/runtime-apis/context/#waituntil)

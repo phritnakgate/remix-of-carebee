@@ -8,8 +8,13 @@ const state = vi.hoisted(() => ({
   publish: vi.fn(),
   open: vi.fn(),
   enabled: true,
+  managedAuth: false,
   delivered: false,
   claimed: false,
+}));
+vi.mock("@/integrations/supabase/cron-auth", () => ({
+  authenticateCronRequest: async () =>
+    state.managedAuth ? null : new Response(null, { status: 500 }),
 }));
 vi.mock("@/integrations/supabase/client.server", () => ({
   supabaseAdmin: { from: state.from },
@@ -48,6 +53,7 @@ vi.mock("./device-api", () => ({
 beforeEach(() => {
   vi.resetAllMocks();
   state.enabled = true;
+  state.managedAuth = false;
   state.delivered = false;
   state.claimed = false;
   state.open.mockImplementation(async (_settings, callback) => callback(state.publish));
@@ -56,6 +62,7 @@ beforeEach(() => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       update: vi.fn().mockReturnThis(),
+      upsert: vi.fn().mockReturnThis(),
       maybeSingle: async () => ({
         error: null,
         data:
@@ -120,6 +127,31 @@ it("rechecks that background reminders are still enabled before sending", async 
   state.enabled = false;
   expect((await runMqttJob(request("valid"))).status).toBe(200);
   expect(state.open).not.toHaveBeenCalled();
+});
+
+it("accepts a verified Lovable job without a separately configured database token", async () => {
+  state.managedAuth = true;
+  expect((await runMqttJob(request("lovable-managed-token"))).status).toBe(200);
+  expect(state.publish).toHaveBeenCalledTimes(1);
+});
+
+it("returns promptly without MQTT when a managed tick has no due work", async () => {
+  state.managedAuth = true;
+  state.delivered = true;
+  expect((await runMqttJob(request("lovable-managed-token"))).status).toBe(200);
+  expect(state.open).not.toHaveBeenCalled();
+});
+
+it("keeps delivery alive after acknowledging a managed scheduler request", async () => {
+  state.managedAuth = true;
+  let task: Promise<unknown> | undefined;
+  const response = await runMqttJob(request("lovable-managed-token"), (pending) => {
+    task = pending;
+  });
+  expect(response.status).toBe(202);
+  expect(task).toBeDefined();
+  await task;
+  expect(state.publish).toHaveBeenCalledTimes(1);
 });
 
 it("records a failed claim for retry when the broker does not acknowledge", async () => {
