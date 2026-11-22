@@ -28,6 +28,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { useActiveBox } from "@/lib/active-box";
 import { registerRealDevice, rotateDeviceKey } from "@/lib/devices.functions";
+import { rememberDeviceKey, useDeviceKey } from "@/lib/device-key-session";
 import { useI18n, type DictKey } from "@/lib/i18n";
 import { deviceConnection, toDateKey, type Device, type DeviceEvent, type DeviceStatusPayload } from "@/lib/medication";
 import { useConfirmDose, useDeviceEvents, useDevices, useDoses, useNow } from "@/lib/queries";
@@ -57,6 +58,12 @@ function DevicesPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [newKey, setNewKey] = useState<DeviceCredentials | null>(null);
   const [toRemove, setToRemove] = useState<Device | null>(null);
+
+  function showKey(credentials: DeviceCredentials) {
+    rememberDeviceKey(ownerId, credentials.deviceId, credentials.key);
+    setNewKey(credentials);
+    void qc.invalidateQueries({ queryKey: ["devices"] });
+  }
 
   const real = (devices.data ?? []).filter((d) => d.mode === "real");
   const sims = (devices.data ?? []).filter((d) => d.mode === "simulated");
@@ -114,7 +121,7 @@ function DevicesPage() {
               events={(events.data ?? []).filter((e) => e.device_id === d.id)}
               canManage={isOwn}
               onRemove={() => setToRemove(d)}
-              onNewKey={setNewKey}
+              onNewKey={showKey}
             />
           ))
         )}
@@ -138,7 +145,7 @@ function DevicesPage() {
         </section>
       )}
 
-      <AddRealDialog open={addOpen} onOpenChange={setAddOpen} onCreated={setNewKey} />
+      <AddRealDialog open={addOpen} onOpenChange={setAddOpen} onCreated={showKey} />
       <KeyDialog keyValue={newKey} onClose={() => setNewKey(null)} />
 
       <AlertDialog open={!!toRemove} onOpenChange={(o) => !o && setToRemove(null)}>
@@ -189,6 +196,8 @@ function DeviceCard({
   ]);
   const hasStatus = isSim || !!device.first_contact_at;
   const rotate = useServerFn(rotateDeviceKey);
+  const [rotating, setRotating] = useState(false);
+  const deviceKey = useDeviceKey(device.owner_id, device.id, device.key_prefix);
 
   return (
     <article className={cn("rounded-2xl border bg-card p-3.5 sm:p-4 shadow-soft", isSim && "border-dashed border-sim sim-stripes")}>
@@ -200,7 +209,6 @@ function DeviceCard({
           ) : (
             <div className="flex flex-wrap gap-x-4 text-sm text-muted-foreground">
               {!tested && <LastSeen device={device} />}
-              {device.key_prefix && <span>{t("deviceKey")}: {device.key_prefix}…</span>}
             </div>
           )}
         </div>
@@ -208,6 +216,28 @@ function DeviceCard({
           {isSim ? <SimBadge /> : <ConnectionPill conn={conn} testReceived={tested} />}
         </div>
       </div>
+
+      {!isSim && canManage && (
+        <div className="mt-3 min-w-0 space-y-2 rounded-lg bg-muted p-3 text-sm">
+          <p className="font-semibold">{t("deviceKey")}</p>
+          {deviceKey ? (
+            <>
+              <code className="block select-all break-all">{deviceKey}</code>
+              <Button type="button" size="sm" variant="outline" onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(deviceKey);
+                  toast.success(t("copied"));
+                } catch {
+                  toast.error(t("rtcCopyFailed"));
+                }
+              }}>
+                <Copy aria-hidden /> {t("copy")}
+              </Button>
+              <p className="text-xs text-muted-foreground">{t("deviceKeyTabHint")}</p>
+            </>
+          ) : <p className="text-muted-foreground">{t("deviceKeyUnavailable")}</p>}
+        </div>
+      )}
 
       {conn === "awaiting_first_contact" && (
         <p className={cn("mt-4 rounded-2xl p-4 text-base", tested ? "bg-secondary text-secondary-foreground" : "bg-pending-soft text-pending-foreground")}>
@@ -297,12 +327,16 @@ function DeviceCard({
           {!isSim && onNewKey && (
             <Button
               variant="soft"
+              disabled={rotating}
               onClick={async () => {
+                setRotating(true);
                 try {
                   const r = await rotate({ data: { deviceId: device.id } });
                   onNewKey({ deviceId: device.id, key: r.key });
                 } catch (e) {
                   toast.error((e as Error).message);
+                } finally {
+                  setRotating(false);
                 }
               }}
             >
@@ -525,9 +559,14 @@ function KeyDialog({ keyValue, onClose }: { keyValue: DeviceCredentials | null; 
         <DialogFooter>
           <Button
             size="lg"
-            onClick={() => {
-              if (keyValue) navigator.clipboard.writeText(keyValue.key);
-              toast.success(t("copied"));
+            onClick={async () => {
+              if (!keyValue) return;
+              try {
+                await navigator.clipboard.writeText(keyValue.key);
+                toast.success(t("copied"));
+              } catch {
+                toast.error(t("rtcCopyFailed"));
+              }
             }}
           >
             <Copy aria-hidden /> {t("copy")}

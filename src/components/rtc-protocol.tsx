@@ -8,6 +8,7 @@ import { boxTopic, type MqttSettings } from "@/lib/mqtt";
 import { rtcMqttPayload } from "@/lib/rtc";
 import { getRtcSchedule } from "@/lib/rtc.functions";
 import { useDevices } from "@/lib/queries";
+import { useDeviceKey } from "@/lib/device-key-session";
 
 export function RtcProtocol({
   deviceId,
@@ -30,6 +31,7 @@ export function RtcProtocol({
     retry: false,
   });
   const device = useDevices(ownerId).data?.find((item) => item.id === deviceId);
+  const deviceKey = useDeviceKey(ownerId, deviceId, device?.key_prefix);
   const status = device?.last_status as { rtc_revision?: string } | undefined;
   const synced = !!config.data && status?.rtc_revision === config.data.revision;
   const inputTopic = boxTopic(settings.sensorTopic, deviceId);
@@ -48,7 +50,7 @@ export function RtcProtocol({
       compartment,
       weight: null,
       isTake: true,
-      device_key: "<DEVICE_KEY>",
+      device_key: deviceKey ?? "<DEVICE_KEY>",
     },
     null,
     2,
