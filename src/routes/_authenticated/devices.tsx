@@ -185,6 +185,7 @@ function DeviceCard({
   const compartments = new Set([
     ...(status.compartments ?? []).map(({ number }) => number),
     ...Object.keys(loadCells ?? {}).filter((key) => key !== "box").map(Number),
+    ...Object.keys(status.intakes ?? {}).map(Number),
   ]);
   const hasStatus = isSim || !!device.first_contact_at;
   const rotate = useServerFn(rotateDeviceKey);
@@ -242,6 +243,10 @@ function DeviceCard({
                     )}
                   >
                     <span className="text-base font-bold">#{number}</span>
+                    {status.intakes?.[String(number)]?.date === toDateKey(now) &&
+                      status.intakes[String(number)]?.isTake && (
+                        <span className="text-xs font-semibold text-green-700">{t("taken")}</span>
+                      )}
                     {c?.open != null && (
                       <span className="text-sm font-semibold">{t(c.open ? "open" : "closed")}</span>
                     )}

@@ -101,6 +101,10 @@ function MedicinesPage() {
   const [toDelete, setToDelete] = useState<Medicine | null>(null);
 
   const schedulesFor = (id: string) => (scheds.data ?? []).filter((s) => s.medicine_id === id && !s.ends_on);
+  function channelTime(boxId: string, slot: BoxSlot) {
+    const medicineIds = new Set((meds.data ?? []).filter((m) => m.device_id === boxId && m.active).map((m) => m.id));
+    return (scheds.data ?? []).find((s) => medicineIds.has(s.medicine_id) && s.box_slot === slot && !s.ends_on)?.dose_time.slice(0, 5);
+  }
 
   function openEdit(m: Medicine) {
     const schedules = schedulesFor(m.id);
@@ -191,6 +195,7 @@ function MedicinesPage() {
       setForm(null);
       qc.invalidateQueries({ queryKey: ["medicines"] });
       qc.invalidateQueries({ queryKey: ["schedules"] });
+      window.dispatchEvent(new Event("carebee-schedule-changed"));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -206,6 +211,7 @@ function MedicinesPage() {
     setToDelete(null);
     qc.invalidateQueries({ queryKey: ["medicines"] });
     qc.invalidateQueries({ queryKey: ["schedules"] });
+    window.dispatchEvent(new Event("carebee-schedule-changed"));
   }
 
   return (
@@ -312,7 +318,12 @@ function MedicinesPage() {
                 </Field>
                 {managed ? (
                   <Field label={t("medicineBox")} id="medicine-box">
-                    <Select value={form.boxId} onValueChange={(boxId) => setForm({ ...form, boxId })}>
+                    <Select value={form.boxId} onValueChange={(boxId) => setForm({
+                      ...form, boxId,
+                      rounds: Object.fromEntries(Object.entries(form.rounds).map(([slot, time]) =>
+                        [slot, channelTime(boxId, slot as BoxSlot) ?? time],
+                      )),
+                    })}>
                       <SelectTrigger id="medicine-box" className="h-12"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">{t("unassignedBox")}</SelectItem>
@@ -341,7 +352,8 @@ function MedicinesPage() {
               {managed ? (
                 <fieldset className="space-y-2">
                   <legend className="mb-2 font-semibold">{t("whenToTake")}</legend>
-                  {BOX_SLOTS.map((slot) => {
+                  <p className="text-sm text-muted-foreground">{t("rtcSharedTime")}</p>
+                  {BOX_SLOTS.filter((slot) => slot !== "bedtime" || form.rounds.bedtime !== undefined).map((slot) => {
                     const time = form.rounds[slot];
                     const label = t(`round_${slot}`);
                     return (
@@ -349,7 +361,7 @@ function MedicinesPage() {
                         <label className="flex min-h-9 flex-1 items-center gap-2 text-sm font-medium">
                           <input type="checkbox" checked={time !== undefined} onChange={(event) => {
                             const rounds = { ...form.rounds };
-                            if (event.target.checked) rounds[slot] = BOX_ROUNDS[slot].time;
+                            if (event.target.checked) rounds[slot] = channelTime(form.boxId, slot) ?? BOX_ROUNDS[slot].time;
                             else delete rounds[slot];
                             setForm({ ...form, rounds });
                           }} />

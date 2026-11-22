@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import type { BoxSlot } from "./medication";
+import { rtcDb } from "./rtc-db";
 
 export function useBoxScheduleSupport() {
   return useQuery({
@@ -22,9 +23,9 @@ export async function saveBoxMedicine(input: {
   medicine: Database["public"]["Tables"]["medicines"]["Insert"] & { device_id: string | null };
   rounds: { box_slot: BoxSlot; dose_time: string }[];
 }) {
-  const { error } = await supabase.rpc("save_box_medicine", {
+  const { error } = await rtcDb(supabase).rpc("save_six_box_medicine", {
     // The SQL uses NULL for a new medicine. The generated RPC type omits that case.
-    _medicine_id: (input.medicineId ?? null) as string,
+    _medicine_id: input.medicineId ?? null,
     _medicine: input.medicine,
     _rounds: input.rounds,
   });

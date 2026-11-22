@@ -12,6 +12,7 @@ import { useI18n, type DictKey } from "@/lib/i18n";
 import { BOX_SLOTS, TIME_SLOTS, scheduleFood, scheduleSlotLabel, type Schedule } from "@/lib/medication";
 import { useMedicines, useNow, useSchedules } from "@/lib/queries";
 import { cn } from "@/lib/utils";
+import { rtcDb } from "@/lib/rtc-db";
 
 export const Route = createFileRoute("/_authenticated/schedule")({
   head: () => ({
@@ -38,15 +39,21 @@ function SchedulePage() {
   const medById = new Map((meds.data ?? []).map((m) => [m.id, m]));
   const list = (scheds.data ?? []).filter((s) => !s.ends_on && medById.get(s.medicine_id)?.active);
   const groupLabels = list.some((s) => s.box_slot)
-    ? [...BOX_SLOTS.map((slot) => `round_${slot}` as const), ...TIME_SLOTS.map((slot) => `slot_${slot}` as const).filter((group) => list.some((s) => scheduleSlotLabel(s) === group))]
+    ? [...BOX_SLOTS.filter((slot) => slot !== "bedtime" || list.some((s) => s.box_slot === "bedtime")).map((slot) => `round_${slot}` as const), ...TIME_SLOTS.map((slot) => `slot_${slot}` as const).filter((group) => list.some((s) => scheduleSlotLabel(s) === group))]
     : TIME_SLOTS.map((slot) => `slot_${slot}` as const);
 
   async function update(s: Schedule, patch: Partial<Pick<Schedule, "dose_time" | "days_of_week" | "notify">>) {
     // optimistic
     qc.setQueryData<Schedule[]>(["schedules", [ownerId]], (old) => old?.map((x) => (x.id === s.id ? { ...x, ...patch } : x)));
-    const { error } = await supabase.from("medication_schedules").update(patch).eq("id", s.id);
+    const deviceId = medById.get(s.medicine_id)?.device_id;
+    const { error } = deviceId && s.box_slot && s.box_slot !== "bedtime" && patch.dose_time
+      ? await rtcDb(supabase).rpc("set_box_channel_schedule", {
+          _device_id: deviceId, _box_slot: s.box_slot, _time: patch.dose_time,
+        })
+      : await supabase.from("medication_schedules").update(patch).eq("id", s.id);
     if (error) toast.error(error.message);
     qc.invalidateQueries({ queryKey: ["schedules"] });
+    if (!error) window.dispatchEvent(new Event("carebee-schedule-changed"));
   }
 
   return (
@@ -118,6 +125,7 @@ function SchedulePage() {
                   <label className="flex items-center gap-2 text-base font-semibold">
                     {t("time")}
                     <Input
+                      key={s.id + s.dose_time}
                       type="time"
                       defaultValue={fmtTime(s.dose_time)}
                       onBlur={(e) => e.target.value && e.target.value !== fmtTime(s.dose_time) && update(s, { dose_time: e.target.value })}

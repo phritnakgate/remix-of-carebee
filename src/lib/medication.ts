@@ -183,6 +183,10 @@ export function slotForTime(time: string): TimeSlot {
 }
 
 export interface DeviceStatusPayload {
+  rtc_revision?: string;
+  rtc_sync_revision?: string;
+  rtc_channels?: Record<string, boolean>;
+  intakes?: Record<string, { date: string; isTake: boolean }>;
   led?: "on" | "off" | "blinking";
   buzzer?: "on" | "off";
   compartments?: { number: number; open?: boolean; has_pills?: boolean }[];

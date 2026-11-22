@@ -31,6 +31,7 @@ export const mqttSettingsSchema = z
     scheduleTopic: topic,
     payload: z.string().max(mqttPayloadLimit),
     medicineIds: z.array(z.string().uuid()).max(500).nullable().default(null),
+    rtc: z.boolean().default(false),
   })
   .refine((settings) => settings.sensorTopic !== settings.scheduleTopic, {
     path: ["scheduleTopic"],
@@ -118,6 +119,7 @@ export const mqttDefaults: MqttSettings = {
   scheduleTopic: "medicine/schedule",
   payload: "",
   medicineIds: null,
+  rtc: true,
 };
 
 export function mqttBrokerUrl(settings: MqttSettings) {

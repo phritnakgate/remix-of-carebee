@@ -9,8 +9,12 @@ import { mqttTestPayload } from "@/lib/mqtt";
 import { getMqttDue, forwardMqttSensor } from "@/lib/mqtt.functions";
 import { MqttSessionProvider, useMqttSession } from "@/lib/mqtt-session";
 import { scheduledReminderPayload } from "@/lib/reminder-template";
+import { mqttDefaults } from "@/lib/mqtt";
+import { getRtcSchedule } from "@/lib/rtc.functions";
+vi.mock("@/lib/rtc.functions", () => ({ getRtcSchedule: vi.fn() }));
 
 vi.mock("@/components/mqtt-background", () => ({ MqttBackground: () => null }));
+vi.mock("@/components/rtc-protocol", () => ({ RtcProtocol: () => null }));
 
 const { queryClient } = vi.hoisted(() => ({ queryClient: { invalidateQueries: vi.fn() } }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => queryClient }));
@@ -104,7 +108,42 @@ function openSettings() {
 beforeEach(() => {
   vi.resetAllMocks();
   localStorage.clear();
+  localStorage.setItem("carebee-mqtt:" + deviceId, JSON.stringify({
+    settings: { ...mqttDefaults, rtc: false }, enabled: false,
+  }));
   vi.mocked(getMqttDue).mockResolvedValue(due([]));
+});
+
+it("sends six saved RTC channels and resends changed or disabled times after a save", async () => {
+  const socket = fixture();
+  localStorage.setItem("carebee-mqtt:" + deviceId, JSON.stringify({
+    settings: { ...mqttDefaults, rtc: true }, enabled: false,
+  }));
+  const channels = ([1,2,3,4,5,6] as const).map((compartment) => ({
+    compartment, time: compartment === 1 ? "07:30" : null,
+    days: compartment === 1 ? [0,1,2,3,4,5,6] : [],
+  }));
+  vi.mocked(getRtcSchedule).mockResolvedValue({
+    deviceId, timezone: "Asia/Bangkok", revision: "test-revision", channels,
+  });
+  render(<MqttSessionProvider userId="owner">{setupPage()}</MqttSessionProvider>);
+  openSettings();
+  fireEvent.click(screen.getByRole("button", { name: "mqttConnect" }));
+  await waitFor(() => expect(socket.connect).toHaveBeenCalled());
+  socket.connected = true;
+  act(() => { socket.emit("connect"); });
+  await waitFor(() => expect(socket.publish).toHaveBeenCalledTimes(6));
+  expect(socket.publish.mock.calls[0]?.slice(0, 2)).toEqual([
+    "medicine/schedule/" + deviceId, '{"compartment":1,"time":"07:30"}',
+  ]);
+  expect(getMqttDue).not.toHaveBeenCalled();
+  vi.mocked(getRtcSchedule).mockResolvedValue({
+    deviceId, timezone: "Asia/Bangkok", revision: "changed",
+    channels: channels.map((channel) => ({ ...channel, time: null, days: [] })),
+  });
+  act(() => { window.dispatchEvent(new Event("carebee-schedule-changed")); });
+  await waitFor(() => expect(socket.publish).toHaveBeenCalledTimes(12));
+  expect(JSON.parse(socket.publish.mock.calls[6]![1])).toMatchObject({ compartment: 1, time: null });
 });
 
 it("unlocks broker settings if opening the MQTT transport throws before a stream exists", async () => {

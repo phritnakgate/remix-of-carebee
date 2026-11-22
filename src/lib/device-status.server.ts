@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 import type { Json } from "@/integrations/supabase/types";
-import { authenticateDevice, json } from "@/lib/device-api";
+import { authenticateDevice, json, zonedNow } from "@/lib/device-api";
+import { rtcReportSchema } from "./rtc";
+import { rtcDb } from "./rtc-db";
 import {
   defaultSensorTemplate,
   isLoadCellReport,
@@ -56,7 +58,7 @@ function applyStandardStatus(auth: DeviceAuth, body: unknown) {
       previous.buzzer !== status.buzzer ||
       JSON.stringify(previous.compartments ?? null) !== JSON.stringify(status.compartments ?? null);
     return {
-      status: { ...status, ...(previous.load_cells ? { load_cells: previous.load_cells } : {}) },
+      status: { ...previous, ...status },
       event: changed ? status : null,
       ...(firmware ? { firmware } : {}),
     };
@@ -89,6 +91,58 @@ export async function receiveMqttStatus(
   } catch {
     return json({ error: "Body must be JSON" }, 400);
   }
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "type" in payload &&
+    payload.type === "schedule_ack"
+  ) {
+    const { acknowledgeRtcChannel } = await import("./rtc-ack.server");
+    return acknowledgeRtcChannel(auth, payload);
+  }
+  const rtcReport = rtcReportSchema.safeParse(payload);
+  if (rtcReport.success) {
+    const report = rtcReport.data;
+    if (report.deviceId !== auth.device.id)
+      return json({ error: "Device ID does not match the key" }, 403);
+    const date = report.scheduledDate ?? zonedNow(auth.timezone, new Date()).date;
+    if (report.isTake) {
+      const result = await rtcDb(auth.admin).rpc("confirm_box_compartment", {
+        _device_id: auth.device.id,
+        _compartment: report.compartment,
+        _date: date,
+      });
+      if (result.error) return json({ error: "Could not confirm compartment" }, 500);
+      if (result.data < 0)
+        return json({ error: "No medicines scheduled in this compartment" }, 404);
+    }
+    return applyStatus(auth, (previous) => {
+      const key = String(report.compartment);
+      const reading =
+        typeof report.weight === "number"
+          ? nextLoadCellStatus(
+              { compartment: report.compartment, weight_g: report.weight },
+              previous.load_cells?.[key],
+              template.thresholdGrams,
+            )
+          : null;
+      const prior = previous.intakes?.[key];
+      return {
+        status: {
+          ...previous,
+          ...(reading ? { load_cells: { ...previous.load_cells, [key]: reading.status } } : {}),
+          intakes: {
+            ...previous.intakes,
+            [key]: {
+              date,
+              isTake: report.isTake || (prior?.date === date && prior.isTake),
+            },
+          },
+        },
+        event: reading?.change ?? null,
+      };
+    });
+  }
   if (!isLoadCellReport(payload, template) && legacyStatus !== undefined) {
     return applyStandardStatus(auth, legacyStatus);
   }
@@ -111,7 +165,7 @@ export async function receiveMqttStatus(
 
 type DeviceAuth = Exclude<Awaited<ReturnType<typeof authenticateDevice>>, { error: Response }>;
 
-async function applyStatus(
+export async function applyStatus(
   { device, admin }: DeviceAuth,
   changes: (previous: DeviceStatusPayload) => {
     status: Json;

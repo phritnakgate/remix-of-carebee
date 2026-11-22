@@ -27,6 +27,8 @@ import {
 import { forwardMqttSensor, getMqttDue } from "./mqtt.functions";
 import { useDevices } from "./queries";
 import { readReminderTemplate, scheduledReminderPayload } from "./reminder-template";
+import { getRtcSchedule } from "./rtc.functions";
+import { rtcMqttPayload } from "./rtc";
 
 const openMqtt = createClientOnlyFn(
   async (settings: MqttSettings, onTransport: (socket: WebSocket) => void) => {
@@ -108,6 +110,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
   const devices = useDevices(userId).data;
   const queryClient = useQueryClient();
   const getDue = useServerFn(getMqttDue);
+  const getRtc = useServerFn(getRtcSchedule);
   const forward = useServerFn(forwardMqttSensor);
 
   const stopSession = useCallback((deviceId: string) => {
@@ -141,6 +144,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
     window.addEventListener("pagehide", pageHide);
     window.addEventListener("pageshow", checkAll);
     window.addEventListener("focus", checkAll);
+    window.addEventListener("carebee-schedule-changed", checkAll);
     window.addEventListener("storage", onStorage);
     document.addEventListener("visibilitychange", checkAll);
     return () => {
@@ -148,6 +152,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
       window.removeEventListener("pagehide", pageHide);
       window.removeEventListener("pageshow", checkAll);
       window.removeEventListener("focus", checkAll);
+      window.removeEventListener("carebee-schedule-changed", checkAll);
       window.removeEventListener("storage", onStorage);
       document.removeEventListener("visibilitychange", checkAll);
       closeAll();
@@ -230,6 +235,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
       let ready = false;
       let checking = false;
       let sentDate = "";
+      let rtcSnapshot = "";
       const sent = new Set<string>();
       const pendingPublishes = new Set<() => void>();
       const requests = new AbortController();
@@ -296,6 +302,17 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
         if (!ready || !connected?.connected || checking || !active) return;
         checking = true;
         try {
+          if (settings.rtc) {
+            const config = await getRtc({ data: { deviceId }, signal: requests.signal });
+            if (!active) return;
+            const snapshot = JSON.stringify(config.channels);
+            if (snapshot === rtcSnapshot) return;
+            for (const channel of config.channels) {
+              if (!(await publishMessage(JSON.stringify(rtcMqttPayload(channel)), false))) return;
+            }
+            rtcSnapshot = snapshot;
+            return;
+          }
           const due = await getDue({ data: { deviceId }, signal: requests.signal });
           if (!active) return;
           if (!due) {
@@ -401,6 +418,16 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
               test,
             );
             if (packet.retain || oversize) return;
+            try {
+              const request = JSON.parse(message);
+              if (settings.rtc && request.type === "schedule_request" && request.deviceId === deviceId) {
+                rtcSnapshot = "";
+                void checkDue();
+                return;
+              }
+            } catch {
+              // The traffic viewer also supports plain-text PoC messages.
+            }
             if (test) {
               setTestContacts((previous) =>
                 previous[deviceId] ? previous : { ...previous, [deviceId]: true },
@@ -422,6 +449,21 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
                 if (accepted) {
                   void queryClient.invalidateQueries({ queryKey: ["devices", userId] });
                   void queryClient.invalidateQueries({ queryKey: ["device_events", userId] });
+                  void queryClient.invalidateQueries({ queryKey: ["dose_logs"] });
+                  void queryClient.invalidateQueries({ queryKey: ["medicines"] });
+                  if (settings.rtc) {
+                    try {
+                      const report = JSON.parse(message);
+                      if (report.deviceId === deviceId && report.isTake === true) {
+                        await publishMessage(JSON.stringify({
+                          type: "intake_ack", compartment: report.compartment,
+                          ...(report.scheduledDate ? { scheduledDate: report.scheduledDate } : {}),
+                        }), false);
+                      }
+                    } catch {
+                      // Non-JSON traffic does not have an application acknowledgement.
+                    }
+                  }
                 }
               } catch {
                 markReceived("notProcessed");
@@ -464,7 +506,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
       });
       void open();
     },
-    [disconnect, forward, getDue, queryClient, recordTraffic, userId],
+    [disconnect, forward, getDue, getRtc, queryClient, recordTraffic, userId],
   );
 
   useEffect(() => {

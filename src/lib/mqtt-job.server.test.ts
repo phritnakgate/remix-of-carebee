@@ -70,7 +70,7 @@ beforeEach(() => {
             ? { token_hash: "abcd" }
             : table === "mqtt_background_configs"
               ? state.enabled
-                ? { owner_id: "owner", settings: mqttDefaults }
+                ? { owner_id: "owner", settings: { ...mqttDefaults, rtc: false } }
                 : null
               : table === "devices"
                 ? { owner_id: "owner" }

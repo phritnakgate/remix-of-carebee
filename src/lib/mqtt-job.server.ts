@@ -128,6 +128,7 @@ async function sendForBox(deviceId: string, template: string, deadline: number) 
   if (config.error) throw config.error;
   if (!config.data) return 0;
   const settings = backgroundSettings(config.data.settings);
+  if (settings.rtc) return 0;
   const device = await supabaseAdmin
     .from("devices")
     .select("id,owner_id")

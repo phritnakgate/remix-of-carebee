@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 import { MqttTrafficPanel } from "@/components/mqtt-traffic";
 import { MqttBackground } from "@/components/mqtt-background";
+import { RtcProtocol } from "@/components/rtc-protocol";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -75,7 +76,7 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
         )}
       </div>
 
-      <p className="mt-3 text-sm text-muted-foreground">{t("mqttKeepTabOpen")}</p>
+      <p className="mt-3 text-sm text-muted-foreground">{t(settings.rtc ? "rtcModeHint" : "mqttKeepTabOpen")}</p>
       <p className="mt-1 text-sm text-muted-foreground">{t("mqttPublicBrokerHint")}</p>
 
       <MqttTrafficPanel
@@ -105,6 +106,10 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
         }}
       >
         <fieldset disabled={locked} className="space-y-5 disabled:opacity-70">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input type="checkbox" checked={settings.rtc} onChange={(event) => patch({ rtc: event.target.checked })} />
+            {t("rtcMode")}
+          </label>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
@@ -188,6 +193,7 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
             </div>
           </div>
 
+          {!settings.rtc && <>
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">{t("mqttMedicines")}</legend>
             <label className="flex items-center gap-2 text-sm">
@@ -236,6 +242,7 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
             />
             <p className="text-sm text-muted-foreground">{t("mqttPayloadHint")}</p>
           </div>
+          </>}
         </fieldset>
 
         {locked ? (
@@ -249,10 +256,20 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
         )}
       </form>
 
-      <MqttBackground deviceId={deviceId} settings={settings} open={open} />
+      {!settings.rtc && <MqttBackground deviceId={deviceId} settings={settings} open={open} />}
 
       <details className="mt-4 text-sm text-muted-foreground">
         <summary className="cursor-pointer font-medium">{t("mqttEsp32Instructions")}</summary>
+        {settings.rtc ? <RtcProtocol deviceId={deviceId} ownerId={ownerId} settings={settings} open={open} /> : <>
+        <p className="mt-3 font-semibold">{t("rtcOutgoing")}</p>
+        <p className="mt-1">{t("rtcOutgoingHint")}</p>
+        <pre className="mt-2 overflow-x-auto rounded-lg bg-muted p-3">{'{"compartment":1,"time":"07:30"}'}</pre>
+        <p className="mt-3 font-semibold">{t("rtcIncoming")}</p>
+        <p className="mt-1">{t("rtcIncomingHint")}</p>
+        <pre className="mt-2 overflow-x-auto rounded-lg bg-muted p-3">
+          {JSON.stringify({deviceId, compartment: 1, weight: null, isTake: true}, null, 2)}
+        </pre>
+        <p className="mt-2">{t("rtcKeyHint")}</p>
         <p className="mt-2">{t("mqttSensorHint")}</p>
         <pre className="mt-2 overflow-x-auto rounded-lg bg-muted p-3">
           {
@@ -267,6 +284,7 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
         <pre className="mt-2 overflow-x-auto rounded-lg bg-muted p-3">
           {'POST /api/public/device/sensor\nContent-Type: application/json\nX-Device-Key: <device-key>\n\n{"type":"load_cell","compartment":1,"weight_g":12.4}'}
         </pre>
+        </>}
       </details>
     </details>
   );

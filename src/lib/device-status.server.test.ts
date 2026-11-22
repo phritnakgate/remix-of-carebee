@@ -5,22 +5,26 @@ import { readSharedTemplate } from "./reminder-template.server";
 import type { DeviceStatusPayload } from "./medication";
 
 const db = vi.hoisted(() => ({
+  boxId: "box-a",
   state: { led: "on" } as DeviceStatusPayload,
   firstContact: "2026-11-16T00:00:00Z",
   addEvent: vi.fn(),
   write: vi.fn(),
+  rpc: vi.fn(),
 }));
 
 vi.mock("./device-api", () => ({
   json: (data: unknown, status = 200) => Response.json(data, { status }),
   authenticateDevice: () => ({
+    timezone: "Asia/Bangkok",
     device: {
-      id: "box-a",
+      id: db.boxId,
       owner_id: "owner-a",
       last_status: db.state,
       first_contact_at: db.firstContact,
     },
     admin: {
+      rpc: db.rpc,
       from: (table: string) =>
         table === "device_events" ? { insert: db.addEvent } : { update: db.write },
     },
@@ -31,6 +35,8 @@ vi.mock("./reminder-template.server", () => ({ readSharedTemplate: vi.fn() }));
 beforeEach(() => {
   vi.clearAllMocks();
   db.state = { led: "on" };
+  db.boxId = "box-a";
+  db.rpc.mockResolvedValue({ data: 2, error: null });
   vi.mocked(readSharedTemplate).mockResolvedValue({ available: false, template: "" });
   db.write.mockImplementation(({ last_status }: { last_status: DeviceStatusPayload }) => {
     const query = {
@@ -44,6 +50,45 @@ beforeEach(() => {
     };
     return query;
   });
+});
+
+it("confirms a compartment without a weight measurement and preserves taken status on later telemetry", async () => {
+  const deviceId = "00000000-0000-4000-8000-000000000001";
+  db.boxId = deviceId;
+  expect(
+    (
+      await receiveMqttStatus(
+        request({
+          deviceId,
+          compartment: 1,
+          weight: null,
+          isTake: true,
+          scheduledDate: "2026-11-22",
+        }),
+        deviceId,
+      )
+    ).ok,
+  ).toBe(true);
+  expect(db.rpc).toHaveBeenCalledWith("confirm_box_compartment", {
+    _device_id: deviceId,
+    _compartment: 1,
+    _date: "2026-11-22",
+  });
+  expect(
+    (
+      await receiveMqttStatus(
+        request({
+          deviceId,
+          compartment: 1,
+          weight: 12.5,
+          isTake: false,
+          scheduledDate: "2026-11-22",
+        }),
+        deviceId,
+      )
+    ).ok,
+  ).toBe(true);
+  expect(db.state.intakes?.["1"]?.isTake).toBe(true);
 });
 
 const request = (payload: unknown) =>
