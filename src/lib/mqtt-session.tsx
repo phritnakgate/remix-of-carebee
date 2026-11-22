@@ -516,7 +516,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
         if (device.mode !== "real" || seen.has(device.id)) continue;
         seen.add(device.id);
         const saved = readSavedConnection(device.id);
-        if (saved?.enabled) connect(device.id, saved.settings);
+        if (saved?.enabled) connect(device.id, { ...saved.settings, rtc: true });
       }
     };
     restore();

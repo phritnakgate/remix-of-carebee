@@ -2,12 +2,10 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { MqttTrafficPanel } from "@/components/mqtt-traffic";
-import { MqttBackground } from "@/components/mqtt-background";
 import { RtcProtocol } from "@/components/rtc-protocol";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/lib/i18n";
 import {
   boxTopic,
@@ -18,7 +16,6 @@ import {
   type MqttSettings,
 } from "@/lib/mqtt";
 import { readMqttSettings, useMqttSession } from "@/lib/mqtt-session";
-import { useMedicines } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 const states = {
@@ -42,9 +39,11 @@ const states = {
 export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: string }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(() => readMqttSettings(deviceId) ?? mqttDefaults);
+  const [draft, setDraft] = useState(() => ({
+    ...(readMqttSettings(deviceId) ?? mqttDefaults),
+    rtc: true,
+  }));
   const { connections, traffic, clearTraffic, publishTest, connect, disconnect } = useMqttSession();
-  const medicines = useMedicines(open ? [ownerId] : []);
   const connection = connections[deviceId];
   const locked = !!connection && connection.state !== "disconnected";
   const settings = locked ? connection.settings : draft;
@@ -76,7 +75,7 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
         )}
       </div>
 
-      <p className="mt-3 text-sm text-muted-foreground">{t(settings.rtc ? "rtcModeHint" : "mqttKeepTabOpen")}</p>
+      <p className="mt-3 text-sm text-muted-foreground">{t("rtcModeHint")}</p>
       <p className="mt-1 text-sm text-muted-foreground">{t("mqttPublicBrokerHint")}</p>
 
       <MqttTrafficPanel
@@ -96,7 +95,7 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
         onSubmit={(event) => {
           event.preventDefault();
           if (locked) return;
-          const parsed = mqttSettingsSchema.safeParse(settings);
+          const parsed = mqttSettingsSchema.safeParse({ ...settings, rtc: true });
           if (!parsed.success) {
             toast.error(t("mqttInvalidSettings"));
             return;
@@ -106,10 +105,6 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
         }}
       >
         <fieldset disabled={locked} className="space-y-5 disabled:opacity-70">
-          <label className="flex items-center gap-2 text-sm font-medium">
-            <input type="checkbox" checked={settings.rtc} onChange={(event) => patch({ rtc: event.target.checked })} />
-            {t("rtcMode")}
-          </label>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
@@ -192,57 +187,6 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
               </code>
             </div>
           </div>
-
-          {!settings.rtc && <>
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">{t("mqttMedicines")}</legend>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={settings.medicineIds === null}
-                onChange={(event) => patch({ medicineIds: event.target.checked ? null : [] })}
-              />
-              {t("mqttAllMedicines")}
-            </label>
-            {settings.medicineIds !== null && (
-              <div className="grid gap-2 pl-5 sm:grid-cols-2">
-                {medicines.isPending && (
-                  <p className="text-sm text-muted-foreground">{t("loading")}</p>
-                )}
-                {(medicines.data ?? []).map((medicine) => (
-                  <label key={medicine.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={settings.medicineIds?.includes(medicine.id) ?? false}
-                      onChange={(event) => {
-                        const selected = settings.medicineIds ?? [];
-                        patch({
-                          medicineIds: event.target.checked
-                            ? [...selected, medicine.id]
-                            : selected.filter((id) => id !== medicine.id),
-                        });
-                      }}
-                    />
-                    {medicine.name}
-                  </label>
-                ))}
-              </div>
-            )}
-          </fieldset>
-
-          <div className="space-y-2">
-            <Label htmlFor={field("payload")}>{t("mqttPayload")}</Label>
-            <Textarea
-              id={field("payload")}
-              value={settings.payload}
-              onChange={(event) => patch({ payload: event.target.value })}
-              maxLength={4096}
-              className="font-mono"
-              placeholder={'{"command":"remind"}'}
-            />
-            <p className="text-sm text-muted-foreground">{t("mqttPayloadHint")}</p>
-          </div>
-          </>}
         </fieldset>
 
         {locked ? (
@@ -256,35 +200,9 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
         )}
       </form>
 
-      {!settings.rtc && <MqttBackground deviceId={deviceId} settings={settings} open={open} />}
-
       <details className="mt-4 text-sm text-muted-foreground">
         <summary className="cursor-pointer font-medium">{t("mqttEsp32Instructions")}</summary>
-        {settings.rtc ? <RtcProtocol deviceId={deviceId} ownerId={ownerId} settings={settings} open={open} /> : <>
-        <p className="mt-3 font-semibold">{t("rtcOutgoing")}</p>
-        <p className="mt-1">{t("rtcOutgoingHint")}</p>
-        <pre className="mt-2 overflow-x-auto rounded-lg bg-muted p-3">{'{"compartment":1,"time":"07:30"}'}</pre>
-        <p className="mt-3 font-semibold">{t("rtcIncoming")}</p>
-        <p className="mt-1">{t("rtcIncomingHint")}</p>
-        <pre className="mt-2 overflow-x-auto rounded-lg bg-muted p-3">
-          {JSON.stringify({deviceId, compartment: 1, weight: null, isTake: true}, null, 2)}
-        </pre>
-        <p className="mt-2">{t("rtcKeyHint")}</p>
-        <p className="mt-2">{t("mqttSensorHint")}</p>
-        <pre className="mt-2 overflow-x-auto rounded-lg bg-muted p-3">
-          {
-            '{"device_key":"smrb_…","status":{"led":"on","compartments":[{"number":1,"open":false}]}}'
-          }
-        </pre>
-        <p className="mt-2">{t("mqttConfirmHint")}</p>
-        <pre className="mt-2 overflow-x-auto rounded-lg bg-muted p-3">
-          {'{"device_key":"smrb_…","schedule_id":"…","scheduled_date":"YYYY-MM-DD"}'}
-        </pre>
-        <p className="mt-3">{t("mqttSensorApiHint")}</p>
-        <pre className="mt-2 overflow-x-auto rounded-lg bg-muted p-3">
-          {'POST /api/public/device/sensor\nContent-Type: application/json\nX-Device-Key: <device-key>\n\n{"type":"load_cell","compartment":1,"weight_g":12.4}'}
-        </pre>
-        </>}
+        <RtcProtocol deviceId={deviceId} ownerId={ownerId} settings={settings} open={open} />
       </details>
     </details>
   );

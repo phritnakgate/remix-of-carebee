@@ -13,7 +13,6 @@ import { mqttDefaults } from "@/lib/mqtt";
 import { getRtcSchedule } from "@/lib/rtc.functions";
 vi.mock("@/lib/rtc.functions", () => ({ getRtcSchedule: vi.fn() }));
 
-vi.mock("@/components/mqtt-background", () => ({ MqttBackground: () => null }));
 vi.mock("@/components/rtc-protocol", () => ({ RtcProtocol: () => null }));
 
 const { queryClient } = vi.hoisted(() => ({ queryClient: { invalidateQueries: vi.fn() } }));
@@ -112,13 +111,13 @@ beforeEach(() => {
     settings: { ...mqttDefaults, rtc: false }, enabled: false,
   }));
   vi.mocked(getMqttDue).mockResolvedValue(due([]));
+  vi.mocked(getRtcSchedule).mockResolvedValue({
+    deviceId, timezone: "Asia/Bangkok", revision: "empty", channels: [],
+  });
 });
 
 it("sends six saved RTC channels and resends changed or disabled times after a save", async () => {
   const socket = fixture();
-  localStorage.setItem("carebee-mqtt:" + deviceId, JSON.stringify({
-    settings: { ...mqttDefaults, rtc: true }, enabled: false,
-  }));
   const channels = ([1,2,3,4,5,6] as const).map((compartment) => ({
     compartment, time: compartment === 1 ? "07:30" : null,
     days: compartment === 1 ? [0,1,2,3,4,5,6] : [],
@@ -137,6 +136,9 @@ it("sends six saved RTC channels and resends changed or disabled times after a s
     "medicine/schedule/" + deviceId, '{"compartment":1,"time":"07:30"}',
   ]);
   expect(getMqttDue).not.toHaveBeenCalled();
+  expect(JSON.parse(localStorage.getItem("carebee-mqtt:" + deviceId)!).settings.rtc).toBe(true);
+  expect(screen.queryByText("mqttPayload")).not.toBeInTheDocument();
+  expect(screen.queryByText("mqttBackgroundTitle")).not.toBeInTheDocument();
   vi.mocked(getRtcSchedule).mockResolvedValue({
     deviceId, timezone: "Asia/Bangkok", revision: "changed",
     channels: channels.map((channel) => ({ ...channel, time: null, days: [] })),
@@ -356,7 +358,7 @@ it("sends a manual payload to the configured outgoing topic and displays the inc
   });
 });
 
-it("keeps MQTT on another CareBee page, sends the due dose once, and closes on page hide", async () => {
+it("keeps MQTT on another CareBee page, syncs RTC changes once, and closes on page hide", async () => {
   const socket = fixture();
   const interval = vi.spyOn(window, "setInterval");
   const screenTree = render(
@@ -371,7 +373,7 @@ it("keeps MQTT on another CareBee page, sends the due dose once, and closes on p
   act(() => {
     socket.emit("connect");
   });
-  await waitFor(() => expect(getMqttDue).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(getRtcSchedule).toHaveBeenCalledTimes(1));
   expect(socket.publish).not.toHaveBeenCalled();
 
   screenTree.rerender(
@@ -379,13 +381,10 @@ it("keeps MQTT on another CareBee page, sends the due dose once, and closes on p
       <p>Dashboard</p>
     </MqttSessionProvider>,
   );
-  localStorage.setItem(`carebee-reminder-template:${deviceId}`, '{"legacy":true}');
-  vi.mocked(getMqttDue).mockImplementation(async () =>
-    due(
-      [dose],
-      '{"time":"{{time}}","compartment":"{{compartment}}","schedule_id":"{{schedule_id}}","nested":{"label":"{{date}} · {{time}}"}}',
-    ),
-  );
+  vi.mocked(getRtcSchedule).mockResolvedValue({
+    deviceId, timezone: "Asia/Bangkok", revision: "changed",
+    channels: [{ compartment: 1, time: "16:00", days: [0,1,2,3,4,5,6] }],
+  });
   if (typeof tick !== "function") throw new Error("MQTT schedule timer did not start");
   act(() => {
     tick();
@@ -396,12 +395,10 @@ it("keeps MQTT on another CareBee page, sends the due dose once, and closes on p
   expect(JSON.parse(payload)).toEqual({
     time: "16:00",
     compartment: 1,
-    schedule_id: dose.schedule_id,
-    nested: { label: `${date} · 16:00` },
   });
 
   fireEvent(document, new Event("visibilitychange"));
-  await waitFor(() => expect(getMqttDue).toHaveBeenCalledTimes(3));
+  await waitFor(() => expect(getRtcSchedule).toHaveBeenCalledTimes(3));
   expect(socket.publish).toHaveBeenCalledTimes(1);
 
   const secret = "smrb_" + "0".repeat(48);
