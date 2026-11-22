@@ -247,12 +247,12 @@ function DeviceCard({
 
       {hasStatus ? (
         <>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {isSim && <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Indicator icon={<Lightbulb />} label={t("led")} value={status.led ? t(status.led as DictKey) : "—"} on={status.led === "on" || status.led === "blinking"} />
             <Indicator icon={<Bell />} label={t("buzzer")} value={status.buzzer ? t(status.buzzer as DictKey) : "—"} on={status.buzzer === "on"} />
             <Indicator icon={<Wifi />} label={t("wifi")} value={status.wifi_rssi != null ? `${status.wifi_rssi} dBm` : "—"} />
             <Indicator icon={<BatteryMedium />} label={t("battery")} value={status.battery != null ? `${status.battery}%` : "—"} />
-          </div>
+          </div>}
           {boxWeight && (
             <div className="mt-2 rounded-xl border p-2.5 text-sm">
               <LoadCellReading cell={boxWeight} />
