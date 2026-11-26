@@ -41,6 +41,7 @@ struct CareBeeChannel {
   int16_t minuteOfDay = -1;
   uint8_t daysMask = 0;
   bool received = false;
+  float expectedDoseG = 0.0f;
 };
 
 namespace CareBee {
@@ -51,7 +52,7 @@ void tick();
 bool connected();
 bool alreadyTaken(uint8_t compartment, const char* date);
 const CareBeeChannel& channel(uint8_t compartment);
-bool report(uint8_t compartment, float grams, bool taken, const char* scheduledDate);
+bool report(uint8_t compartment, float grams, bool taken, const char* scheduledDate, bool partial = false);
 void requestSchedule();
 void ping();
 }
@@ -78,7 +79,7 @@ static_assert(CAREBEE_EMPTY_TOLERANCE_G > 0 && CAREBEE_STABLE_SPREAD_G > 0 &&
               CAREBEE_STABLE_SPREAD_G <= CAREBEE_EMPTY_TOLERANCE_G,
               "Use positive scale tolerances, with stability spread no larger than empty tolerance");
 
-enum class TrayReading : uint8_t { Unknown, Loaded, Empty };
+enum class TrayReading : uint8_t { Unknown, Loaded, Remaining, Empty };
 
 class TrayStability {
  public:
@@ -86,6 +87,7 @@ class TrayStability {
     const float difference = grams - EMPTY_TRAY_WEIGHT_G;
     TrayReading reading = TrayReading::Unknown;
     if (fabsf(difference) <= CAREBEE_EMPTY_TOLERANCE_G) reading = TrayReading::Empty;
+    if (difference > CAREBEE_EMPTY_TOLERANCE_G) reading = TrayReading::Remaining;
     if (difference > 2.0f * CAREBEE_EMPTY_TOLERANCE_G) reading = TrayReading::Loaded;
     if (reading == TrayReading::Unknown) {
       candidate = reading;
@@ -114,7 +116,17 @@ class TrayStability {
 
 TrayStability trayStability;
 TrayReading stableTrayReading = TrayReading::Unknown;
-bool pickupSawLoaded = false;
+float pickupLoadedGrams = NAN;
+float pickupExpectedGrams = 0.0f;
+float snoozedLoadedGrams = NAN;
+float snoozedExpectedGrams = 0.0f;
+float pendingPartialGrams = NAN;
+
+float stableRemovedGrams(uint32_t now) {
+  if (!isfinite(pickupLoadedGrams) || stableTrayReading == TrayReading::Unknown ||
+      now - latestScaleMs > 500U) return NAN;
+  return pickupLoadedGrams - latestScaleGrams;
+}
 uint32_t lastPickupAttemptMs = 0;
 
 enum MedState : uint8_t { ST_IDLE, ST_REMIND, ST_WAIT_RESPONSE, ST_VERIFY_FACE };
@@ -758,11 +770,17 @@ void startReminder(int8_t slot) {
   if (!channel.received || channel.minuteOfDay < 0 || !channel.daysMask) return;
   carebeeActiveDate = carebeeDate(nowTime());
   activeSlot = slot;
-  pickupSawLoaded = CAREBEE_HX711_COMPARTMENT == slot + 1 &&
-                    stableTrayReading == TrayReading::Loaded &&
-                    millis() - latestScaleMs <= 500U;
+  const bool loaded = CAREBEE_HX711_COMPARTMENT == slot + 1 &&
+                      stableTrayReading == TrayReading::Loaded &&
+                      millis() - latestScaleMs <= 500U;
+  pickupLoadedGrams = loaded ? latestScaleGrams : NAN;
+  pickupExpectedGrams = channel.expectedDoseG;
+  pendingPartialGrams = NAN;
   lastPickupAttemptMs = millis() - 2000U;
-  if (!pickupSawLoaded) trayStability = TrayStability{};
+  if (!loaded) {
+    trayStability = TrayStability{};
+    stableTrayReading = TrayReading::Unknown;
+  }
   faceTries = 0;
   lastRemindMs = 0;
   remindStartedMs = millis();
@@ -837,6 +855,8 @@ void handleSnoozePressed() {
   DateTime n = nowTime();
   snoozeSlot = activeSlot;
   carebeeSnoozeDate = carebeeActiveDate;
+  snoozedLoadedGrams = pickupLoadedGrams;
+  snoozedExpectedGrams = pickupExpectedGrams;
   snoozeUntilSec = n.unixtime() + (uint32_t)SNOOZE_MINUTES * 60;
   snoozeToday++;
   String msg = String("😴 เลื่อนแจ้งเตือน ") + doseSchedule[activeSlot].label +
@@ -937,17 +957,46 @@ void markTaken(bool viaFace) {
   updateDisplay();
 }
 
+bool fullPickup(float removed) {
+  return stableTrayReading == TrayReading::Empty && removed > CAREBEE_EMPTY_TOLERANCE_G &&
+         removed + CAREBEE_EMPTY_TOLERANCE_G >= pickupExpectedGrams;
+}
+
+void confirmScalePickup() {
+  Serial.printf("[HX711] compartment=%d stable empty after loaded (%.3f g)\n",
+                activeSlot + 1, latestScaleGrams);
+  if (FACE_VERIFY_ENABLED) {
+    pickupLoadedGrams = NAN;
+    handleTakenPressed();
+  } else {
+    markTaken(false);
+  }
+}
+
 void markMissed() {
+  const float removed = stableRemovedGrams(millis());
+  if (!isfinite(pendingPartialGrams) && fullPickup(removed)) {
+    confirmScalePickup();
+    return;
+  }
+  if (!isfinite(pendingPartialGrams) && removed > CAREBEE_EMPTY_TOLERANCE_G && removed <= 10000.0f)
+    pendingPartialGrams = removed;
+
+  const bool partial = isfinite(pendingPartialGrams);
+  if (partial && !CareBee::report(activeSlot + 1, pendingPartialGrams, false,
+                                  carebeeActiveDate.c_str(), true)) return;
+
   buzzer(false);
   digitalWrite(PIN_LED, LOW);
   if (activeSlot >= 0 && carebeeActiveDate == carebeeDate(nowTime())) doseMissed[activeSlot] = true;
-  missedToday++; // A missed dose must not reduce stock.
+  if (!partial) missedToday++;
 
-  String msg = String("❌ ลืมกินยา: ") +
+  String msg = String(partial ? "⚠️ รับยาไม่ครบ: " : "❌ ลืมกินยา: ") +
                (activeSlot >= 0 ? String(doseSchedule[activeSlot].label) : String("-"));
+  if (partial) msg += String("\nน้ำหนักยาที่หยิบออก ") + String(pendingPartialGrams, 3) + " g";
   msg += "\nระบบปิดเสียงเตือนอัตโนมัติแล้ว ไม่หักสต็อกยา";
   tgSend(msg);
-  logEvent("missed", msg);
+  logEvent(partial ? "taken_partial" : "missed", msg);
 
   activeSlot = -1;
   state = ST_IDLE;
@@ -984,18 +1033,11 @@ void sampleScaleAndCheckPickup() {
       (state != ST_REMIND && state != ST_WAIT_RESPONSE) ||
       now - remindStartedMs >= RESPONSE_TIMEOUT_MS) return;
 
-  if (stableTrayReading == TrayReading::Loaded) pickupSawLoaded = true;
-  if (!pickupSawLoaded || stableTrayReading != TrayReading::Empty ||
-      now - lastPickupAttemptMs < 2000U) return;
-
-  lastPickupAttemptMs = now;
-  Serial.printf("[HX711] compartment=%d stable empty after loaded (%.3f g)\n",
-                activeSlot + 1, latestScaleGrams);
-  if (FACE_VERIFY_ENABLED) {
-    pickupSawLoaded = false;
-    handleTakenPressed();
-  } else {
-    markTaken(false);
+  if (stableTrayReading == TrayReading::Loaded && !isfinite(pickupLoadedGrams))
+    pickupLoadedGrams = latestScaleGrams;
+  if (fullPickup(stableRemovedGrams(now)) && now - lastPickupAttemptMs >= 2000U) {
+    lastPickupAttemptMs = now;
+    confirmScalePickup();
   }
 }
 
@@ -1083,7 +1125,11 @@ void checkSnooze(const DateTime &n) {
   int8_t s = snoozeSlot;
   snoozeSlot = -1;
   startReminder(s);
-  if (activeSlot == s) carebeeActiveDate = carebeeSnoozeDate;
+  if (activeSlot == s) {
+    carebeeActiveDate = carebeeSnoozeDate;
+    if (isfinite(snoozedLoadedGrams)) pickupLoadedGrams = snoozedLoadedGrams;
+    pickupExpectedGrams = snoozedExpectedGrams;
+  }
 }
 
 // ---------------------------------------------------------------- WiFi / เวลา
@@ -1385,6 +1431,7 @@ size_t nextRetry = 0;
 struct Pending {
   uint8_t compartment = 0;
   float grams = NAN;
+  bool partial = false;
   char date[11] = {};
 };
 Pending pending[12];
@@ -1415,7 +1462,8 @@ bool publish(JsonDocument& doc) {
 }
 
 bool sameChannel(const CareBeeChannel& a, const CareBeeChannel& b) {
-  return a.minuteOfDay == b.minuteOfDay && a.daysMask == b.daysMask && a.received == b.received;
+  return a.minuteOfDay == b.minuteOfDay && a.daysMask == b.daysMask &&
+         a.received == b.received && a.expectedDoseG == b.expectedDoseG;
 }
 
 bool decodeChannel(JsonVariantConst input, CareBeeChannel& result) {
@@ -1443,6 +1491,10 @@ bool decodeChannel(JsonVariantConst input, CareBeeChannel& result) {
       result.daysMask |= 1 << day.as<int>();
     }
   }
+  if (input["expectedDoseG"].is<float>()) {
+    const float grams = input["expectedDoseG"].as<float>();
+    if (isfinite(grams) && grams > 0 && grams <= 10000.0f) result.expectedDoseG = grams;
+  }
   result.received = true;
   return true;
 }
@@ -1454,6 +1506,7 @@ void encodeChannel(JsonObject item, const CareBeeChannel& channel) {
     snprintf(text, sizeof(text), "%02d:%02d", channel.minuteOfDay / 60, channel.minuteOfDay % 60);
     item["time"] = text;
   }
+  if (channel.expectedDoseG > 0) item["expectedDoseG"] = channel.expectedDoseG;
   JsonArray days = item["days"].to<JsonArray>();
   for (int day = 0; day < 7; day++) if (channel.daysMask & (1 << day)) days.add(day);
 }
@@ -1548,6 +1601,9 @@ bool loadIntakes() {
     auto& item = restoredQueue[index++];
     item.compartment = compartment;
     item.grams = entry["weight"] | NAN;
+    item.partial = entry["partial"] | false;
+    if (item.partial && (!isfinite(item.grams) || item.grams <= 0 || item.grams > 10000.0f))
+      return false;
     memcpy(item.date, date, 11);
   }
   if (index != queued.size()) return false;
@@ -1569,6 +1625,7 @@ bool saveIntakes() {
     JsonObject entry = queued.add<JsonObject>();
     entry["compartment"] = item.compartment;
     entry["scheduledDate"] = static_cast<const char*>(item.date);
+    if (item.partial) entry["partial"] = true;
     if (isfinite(item.grams)) entry["weight"] = item.grams;
     else entry["weight"] = nullptr;
   }
@@ -1588,18 +1645,23 @@ void acknowledgeSchedule(uint8_t compartment) {
   }
 }
 
-bool publishReport(uint8_t compartment, float grams, bool taken, const char* date) {
+bool publishReport(uint8_t compartment, float grams, bool taken, const char* date, bool partial) {
   JsonDocument doc;
   doc["deviceId"] = CAREBEE_DEVICE_ID;
   doc["device_key"] = CAREBEE_DEVICE_KEY;
   doc["compartment"] = compartment;
-  if (isfinite(grams)) doc["weight"] = grams;
-  else doc["weight"] = nullptr;
-  doc["isTake"] = taken;
+  if (partial) {
+    doc["type"] = "intake_partial";
+    doc["removedWeightG"] = grams;
+  } else {
+    if (isfinite(grams)) doc["weight"] = grams;
+    else doc["weight"] = nullptr;
+    doc["isTake"] = taken;
+  }
   if (date && strlen(date) == 10) doc["scheduledDate"] = date;
   bool sent = publish(doc);
-  Serial.printf("[TX] compartment=%u isTake=%s sent=%s (wait for web confirmation)\n",
-                compartment, taken ? "true" : "false", sent ? "yes" : "no");
+  Serial.printf("[TX] compartment=%u outcome=%s sent=%s\n",
+                compartment, partial ? "partial" : (taken ? "taken" : "sensor"), sent ? "yes" : "no");
   return sent;
 }
 
@@ -1615,8 +1677,9 @@ void receive(char* topic, byte* payload, unsigned int length) {
     int compartment = doc["compartment"] | 0;
     const char* date = doc["scheduledDate"] | "";
     if (compartment < 1 || compartment > 6 || !validDate(date)) return;
+    const bool partial = strcmp(doc["outcome"] | "", "partial") == 0;
     for (auto& item : pending) {
-      if (item.compartment == compartment && strcmp(item.date, date) == 0) {
+      if (item.compartment == compartment && item.partial == partial && strcmp(item.date, date) == 0) {
         item.compartment = 0;
         if (!saveIntakes()) {
           item.compartment = compartment;
@@ -1711,7 +1774,7 @@ void CareBee::tick() {
     const auto& item = pending[nextRetry];
     nextRetry = (nextRetry + 1) % pendingCount;
     if (!item.compartment) continue;
-    publishReport(item.compartment, item.grams, true, item.date);
+    publishReport(item.compartment, item.grams, !item.partial, item.date, item.partial);
     break;
   }
 }
@@ -1731,9 +1794,10 @@ bool CareBee::alreadyTaken(uint8_t compartment, const char* date) {
   return false;
 }
 
-bool CareBee::report(uint8_t compartment, float grams, bool taken, const char* date) {
+bool CareBee::report(uint8_t compartment, float grams, bool taken, const char* date, bool partial) {
   if (compartment < 1 || compartment > 6) return false;
-  if (!taken) return publishReport(compartment, grams, false, date);
+  if (!taken && !partial) return publishReport(compartment, grams, false, date, false);
+  if (partial && (taken || !isfinite(grams) || grams <= 0 || grams > 10000.0f)) return false;
   if (!intakeReady || !validDate(date)) return false;
   if (alreadyTaken(compartment, date)) return true;
   for (auto& item : pending) {
@@ -1744,6 +1808,7 @@ bool CareBee::report(uint8_t compartment, float grams, bool taken, const char* d
     if (strcmp(date, completed) > 0) memcpy(completed, date, 11);
     item.compartment = compartment;
     item.grams = grams;
+    item.partial = partial;
     memcpy(item.date, date, 11);
     if (!saveIntakes()) {
       item.compartment = 0;
@@ -1751,7 +1816,7 @@ bool CareBee::report(uint8_t compartment, float grams, bool taken, const char* d
       return false;
     }
     Serial.printf("[QUEUE] Intake saved locally: compartment=%u date=%s\n", compartment, date);
-    if (mqtt.connected()) publishReport(compartment, grams, true, date);
+    if (mqtt.connected()) publishReport(compartment, grams, taken, date, partial);
     return true;
   }
   Serial.println(F("[QUEUE] Full. Wait for intake_ack before confirming more doses."));
