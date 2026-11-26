@@ -15,8 +15,14 @@ vi.mock("@/lib/rtc.functions", () => ({ getRtcSchedule: vi.fn() }));
 
 vi.mock("@/components/rtc-protocol", () => ({ RtcProtocol: () => null }));
 
-const { queryClient } = vi.hoisted(() => ({ queryClient: { invalidateQueries: vi.fn() } }));
-vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => queryClient }));
+const { queryClient, rtcConfig } = vi.hoisted(() => ({
+  queryClient: { invalidateQueries: vi.fn() },
+  rtcConfig: { data: undefined as Awaited<ReturnType<typeof getRtcSchedule>> | undefined },
+}));
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => queryClient,
+  useQuery: () => rtcConfig,
+}));
 
 vi.mock("@tanstack/react-start", () => ({
   createClientOnlyFn: (fn: unknown) => fn,
@@ -106,6 +112,7 @@ function openSettings() {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  rtcConfig.data = undefined;
   localStorage.clear();
   localStorage.setItem("carebee-mqtt:" + deviceId, JSON.stringify({
     settings: { ...mqttDefaults, rtc: false }, enabled: false,
@@ -489,4 +496,30 @@ it("publishes a decimal dose weight and acknowledges a saved partial intake", as
   expect(JSON.parse(socket.publish.mock.calls[1]![1])).toEqual({
     type: "intake_ack", compartment: 1, outcome: "partial", scheduledDate: date,
   });
+});
+
+it("uses the calculated dose weight by default and republishes when it changes", async () => {
+  const socket = fixture();
+  const config = (expectedDoseG: number) => ({
+    deviceId,
+    timezone: "Asia/Bangkok",
+    revision: "same-timing",
+    channels: [{ compartment: 1, time: "07:30", days: [1, 3], expectedDoseG }],
+  });
+  rtcConfig.data = config(1.75);
+  vi.mocked(getRtcSchedule).mockResolvedValue(config(1.75));
+  render(<MqttSessionProvider userId="owner">{setupPage()}</MqttSessionProvider>);
+  openSettings();
+  expect(screen.getByLabelText("compartment 1")).toHaveAttribute("placeholder", "1.75");
+  fireEvent.click(screen.getByRole("button", { name: "mqttConnect" }));
+  await waitFor(() => expect(socket.connect).toHaveBeenCalled());
+  socket.connected = true;
+  act(() => { socket.emit("connect"); });
+  await waitFor(() => expect(socket.publish).toHaveBeenCalledTimes(1));
+  expect(JSON.parse(socket.publish.mock.calls[0]![1]).expectedDoseG).toBe(1.75);
+
+  vi.mocked(getRtcSchedule).mockResolvedValue(config(2.25));
+  act(() => { window.dispatchEvent(new Event("carebee-schedule-changed")); });
+  await waitFor(() => expect(socket.publish).toHaveBeenCalledTimes(2));
+  expect(JSON.parse(socket.publish.mock.calls[1]![1]).expectedDoseG).toBe(2.25);
 });

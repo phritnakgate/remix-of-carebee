@@ -27,7 +27,7 @@ export function RtcProtocol({
     queryKey: ["rtc-config", deviceId],
     queryFn: () => getRtcSchedule({ data: { deviceId } }),
     enabled: open,
-    refetchInterval: open ? 5000 : false,
+    staleTime: 5_000,
     retry: false,
   });
   const device = useDevices(ownerId).data?.find((item) => item.id === deviceId);

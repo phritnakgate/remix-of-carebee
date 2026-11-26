@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -16,6 +17,7 @@ import {
   type MqttSettings,
 } from "@/lib/mqtt";
 import { readMqttSettings, useMqttSession } from "@/lib/mqtt-session";
+import { getRtcSchedule } from "@/lib/rtc.functions";
 import { RTC_CHANNELS } from "@/lib/rtc";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +42,14 @@ const states = {
 export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: string }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  const { data: rtcConfig } = useQuery({
+    queryKey: ["rtc-config", deviceId],
+    queryFn: () => getRtcSchedule({ data: { deviceId } }),
+    enabled: open,
+    staleTime: 5_000,
+    refetchInterval: open ? 5_000 : false,
+    retry: false,
+  });
   const [draft, setDraft] = useState(() => ({
     ...(readMqttSettings(deviceId) ?? mqttDefaults),
     rtc: true,
@@ -201,6 +211,7 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
                     step="any"
                     min={0.001}
                     max={10000}
+                    placeholder={rtcConfig?.channels.find((channel) => channel.compartment === compartment)?.expectedDoseG?.toString()}
                     value={settings.compartmentWeightsG?.[compartment - 1] ?? ""}
                     onChange={(event) => {
                       const value = event.currentTarget.valueAsNumber;

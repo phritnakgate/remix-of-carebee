@@ -21,8 +21,9 @@ export async function readRtcSchedule(deviceId: string, ownerId: string) {
     deviceId,
     now.date,
   );
+  const timing = channels.map(({ compartment, time, days }) => ({ compartment, time, days }));
   return {
-    revision: await hashDeviceKey(JSON.stringify({ timezone, channels })),
+    revision: await hashDeviceKey(JSON.stringify({ timezone, channels: timing })),
     deviceId,
     timezone,
     channels,
