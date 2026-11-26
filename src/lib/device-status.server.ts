@@ -2,7 +2,8 @@ import { z } from "zod";
 
 import type { Json } from "@/integrations/supabase/types";
 import { authenticateDevice, json, zonedNow } from "@/lib/device-api";
-import { rtcReportSchema } from "./rtc";
+import { partialIntakeSchema, rtcReportSchema } from "./rtc";
+import { hashDeviceKey } from "./device-keys";
 import { rtcDb } from "./rtc-db";
 import {
   defaultSensorTemplate,
@@ -99,6 +100,25 @@ export async function receiveMqttStatus(
   ) {
     const { acknowledgeRtcChannel } = await import("./rtc-ack.server");
     return acknowledgeRtcChannel(auth, payload);
+  }
+  if (payload && typeof payload === "object" && "type" in payload && payload.type === "intake_partial") {
+    const parsed = partialIntakeSchema.safeParse(payload);
+    if (!parsed.success) return json({ error: "Invalid partial intake report" }, 400);
+    const report = parsed.data;
+    if (report.deviceId !== auth.device.id)
+      return json({ error: "Device ID does not match the key" }, 403);
+    const digest = await hashDeviceKey(`intake_partial:${report.deviceId}:${report.compartment}:${report.scheduledDate}`);
+    const id = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`;
+    const { error } = await auth.admin.from("device_events").upsert({
+      id,
+      device_id: auth.device.id,
+      owner_id: auth.device.owner_id,
+      event_type: "intake_partial",
+      source: "real",
+      payload: { compartment: report.compartment, scheduledDate: report.scheduledDate, removedWeightG: report.removedWeightG },
+    }, { onConflict: "id", ignoreDuplicates: true });
+    if (error) return json({ error: "Could not save partial intake" }, 500);
+    return applyStatus(auth, (previous) => ({ status: { ...previous }, event: null }));
   }
   const rtcReport = rtcReportSchema.safeParse(payload);
   if (rtcReport.success) {

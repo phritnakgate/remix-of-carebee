@@ -60,7 +60,10 @@ export const DUE_SOON_MINUTES = 30;
 /** A real device counts as online only if it reported within this window. */
 export const DEVICE_ONLINE_WINDOW_SECONDS = 120;
 
-export type DoseStatus = "taken" | "pending" | "missed";
+export type DoseStatus = "taken" | "pending" | "missed" | "partial";
+
+export const partialIntakeKey = (deviceId: string, compartment: number, date: string) =>
+  `${deviceId}:${compartment}:${date}`;
 
 export interface Dose {
   key: string;
@@ -107,6 +110,7 @@ export function expandDoses(params: {
   schedules: Schedule[];
   medicines: Medicine[];
   logs: DoseLog[];
+  partialIntakes?: ReadonlySet<string>;
   now: Date;
 }): Dose[] {
   const medById = new Map(params.medicines.map((m) => [m.id, m]));
@@ -125,7 +129,10 @@ export function expandDoses(params: {
       if (at.getTime() < new Date(s.created_at).getTime()) continue;
       const log = logByKey.get(`${s.id}:${date}`) ?? null;
       if (s.ends_on && date >= s.ends_on && !log) continue;
-      const status = doseStatus(at, !!log, params.now);
+      const compartment = scheduleCompartment(s, med);
+      const partial = !log && med.device_id && compartment != null &&
+        params.partialIntakes?.has(partialIntakeKey(med.device_id, compartment, date));
+      const status = partial ? "partial" : doseStatus(at, !!log, params.now);
       doses.push({
         key: `${s.id}:${date}`,
         date,
@@ -145,12 +152,14 @@ export function summarize(doses: Dose[]) {
   const taken = doses.filter((d) => d.status === "taken").length;
   const missed = doses.filter((d) => d.status === "missed").length;
   const pending = doses.filter((d) => d.status === "pending").length;
-  const decided = taken + missed;
+  const partial = doses.filter((d) => d.status === "partial").length;
+  const decided = taken + missed + partial;
   return {
     total: doses.length,
     taken,
     missed,
     pending,
+    partial,
     adherence: decided === 0 ? null : Math.round((taken / decided) * 100),
   };
 }

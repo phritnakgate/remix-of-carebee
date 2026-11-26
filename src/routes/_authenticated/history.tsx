@@ -77,6 +77,7 @@ function Daily() {
         <div className="flex flex-wrap gap-2 text-base">
           <StatusBadge status="taken" /> <span className="mr-3 font-bold tabular-nums">{s.taken}</span>
           <StatusBadge status="pending" /> <span className="mr-3 font-bold tabular-nums">{s.pending}</span>
+          {s.partial > 0 && <><StatusBadge status="partial" /> <span className="mr-3 font-bold tabular-nums">{s.partial}</span></>}
           <StatusBadge status="missed" /> <span className="font-bold tabular-nums">{s.missed}</span>
         </div>
       )}
@@ -120,6 +121,7 @@ function Weekly() {
                 <div className="flex w-full max-w-14 flex-1 flex-col-reverse overflow-hidden rounded-xl bg-muted">
                   <div className="bg-taken" style={{ height: h(s.taken) }} title={`${t("taken")} ${s.taken}`} />
                   <div className="bg-missed" style={{ height: h(s.missed) }} title={`${t("missed")} ${s.missed}`} />
+                  <div className="bg-yellow-400" style={{ height: h(s.partial) }} title={`${t("partial")} ${s.partial}`} />
                   <div className="bg-pending" style={{ height: h(s.pending) }} title={`${t("pending")} ${s.pending}`} />
                 </div>
                 <span className="text-sm font-semibold">{format(scheduledDate(date, "00:00"), "EEE", { locale })}</span>
@@ -134,6 +136,7 @@ function Weekly() {
           <span>
             {t("missed")}: <span className="tabular-nums">{total.missed}</span>
           </span>
+          {total.partial > 0 && <span>{t("partial")}: <span className="tabular-nums">{total.partial}</span></span>}
           <span>
             {t("adherence")}: <span className="tabular-nums">{total.adherence === null ? "—" : `${total.adherence}%`}</span>
           </span>

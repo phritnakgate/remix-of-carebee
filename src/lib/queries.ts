@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import {
   expandDoses,
+  partialIntakeKey,
   readSchedule,
   toDateKey,
   type Device,
@@ -111,15 +112,38 @@ export function useDoses(ownerIds: string[], dates: string[], now: Date) {
   const meds = useMedicines(ownerIds);
   const scheds = useSchedules(ownerIds);
   const logs = useDoseLogs(ownerIds, dates[0] ?? "", dates[dates.length - 1] ?? "");
+  const from = dates[0] ?? "";
+  const to = dates[dates.length - 1] ?? "";
+  const partial = useQuery({
+    queryKey: ["device_events", "partial", ownerIds, from, to],
+    enabled: ownerIds.length > 0 && !!from && !!to,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("device_events")
+        .select("device_id,payload")
+        .in("owner_id", ownerIds)
+        .eq("source", "real")
+        .eq("event_type", "intake_partial")
+        .gte("payload->>scheduledDate", from)
+        .lte("payload->>scheduledDate", to);
+      if (error) throw error;
+      const keys = new Set<string>();
+      for (const event of data) {
+        const payload = event.payload as { compartment?: number; scheduledDate?: string } | null;
+        if (typeof payload?.compartment === "number" && typeof payload.scheduledDate === "string")
+          keys.add(partialIntakeKey(event.device_id, payload.compartment, payload.scheduledDate));
+      }
+      return keys;
+    },
+  });
   const ready = !!meds.data && !!scheds.data && !!logs.data;
   const doses: Dose[] = ready
-    ? expandDoses({ dates, schedules: scheds.data!, medicines: meds.data!, logs: logs.data!, now })
+    ? expandDoses({ dates, schedules: scheds.data!, medicines: meds.data!, logs: logs.data!, ...(partial.data ? { partialIntakes: partial.data } : {}), now })
     : [];
   return {
     doses,
     medicines: meds.data ?? [],
     isLoading: meds.isLoading || scheds.isLoading || logs.isLoading,
-    error: meds.error || scheds.error || logs.error,
+    error: meds.error || scheds.error || logs.error || partial.error,
   };
 }
 

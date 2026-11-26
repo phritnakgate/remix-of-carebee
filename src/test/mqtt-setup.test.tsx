@@ -461,3 +461,32 @@ it("restores the connection when reopening CareBee until the user disconnects", 
   expect(screen.getByLabelText("mqttHost")).toBeEnabled();
   expect(mqtt.connect).not.toHaveBeenCalled();
 });
+
+it("publishes a decimal dose weight and acknowledges a saved partial intake", async () => {
+  const socket = fixture();
+  vi.mocked(getRtcSchedule).mockResolvedValue({
+    deviceId, timezone: "Asia/Bangkok", revision: "weighted",
+    channels: [{ compartment: 1, time: "07:30", days: [0, 1, 2, 3, 4, 5, 6] }],
+  });
+  render(<MqttSessionProvider userId="owner">{setupPage()}</MqttSessionProvider>);
+  openSettings();
+  fireEvent.change(screen.getByLabelText("compartment 1"), { target: { value: "2.35" } });
+  fireEvent.click(screen.getByRole("button", { name: "mqttConnect" }));
+  await waitFor(() => expect(socket.connect).toHaveBeenCalled());
+  socket.connected = true;
+  act(() => { socket.emit("connect"); });
+  await waitFor(() => expect(socket.publish).toHaveBeenCalledTimes(1));
+  expect(JSON.parse(socket.publish.mock.calls[0]![1])).toEqual({
+    compartment: 1, time: "07:30", expectedDoseG: 2.35,
+  });
+  vi.mocked(forwardMqttSensor).mockResolvedValue(true);
+  const message = JSON.stringify({
+    type: "intake_partial", deviceId, device_key: "smrb_" + "0".repeat(48),
+    compartment: 1, scheduledDate: date, removedWeightG: 1.25,
+  });
+  act(() => { socket.emit("message", sensorTopic, Buffer.from(message), { retain: false }); });
+  await waitFor(() => expect(socket.publish).toHaveBeenCalledTimes(2));
+  expect(JSON.parse(socket.publish.mock.calls[1]![1])).toEqual({
+    type: "intake_ack", compartment: 1, outcome: "partial", scheduledDate: date,
+  });
+});

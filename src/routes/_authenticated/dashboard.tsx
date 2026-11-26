@@ -63,7 +63,7 @@ function Dashboard() {
               </p>
             </div>
           </div>
-        ) : s.total > 0 ? (
+        ) : s.total > 0 && s.taken === s.total ? (
           <div className="mt-3 flex items-center gap-2 rounded-xl bg-taken-soft p-3 text-lg font-bold text-taken-foreground">
             <PartyPopper className="size-7" aria-hidden /> {t("allDone")}
           </div>
@@ -84,6 +84,7 @@ function Dashboard() {
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label={t("taken")} value={s.taken} tone="taken" />
         <StatTile label={t("pending")} value={s.pending} tone="pending" />
+        {s.partial > 0 && <StatTile label={t("partial")} value={s.partial} tone="pending" />}
         <StatTile label={t("missed")} value={s.missed} tone="missed" />
         <StatTile label={t("adherence")} value={s.adherence === null ? "—" : `${s.adherence}%`} tone="primary" />
       </section>

@@ -9,6 +9,7 @@ const db = vi.hoisted(() => ({
   state: { led: "on" } as DeviceStatusPayload,
   firstContact: "2026-11-16T00:00:00Z",
   addEvent: vi.fn(),
+  upsertEvent: vi.fn(),
   write: vi.fn(),
   rpc: vi.fn(),
 }));
@@ -26,7 +27,7 @@ vi.mock("./device-api", () => ({
     admin: {
       rpc: db.rpc,
       from: (table: string) =>
-        table === "device_events" ? { insert: db.addEvent } : { update: db.write },
+        table === "device_events" ? { insert: db.addEvent, upsert: db.upsertEvent } : { update: db.write },
     },
   }),
 }));
@@ -36,6 +37,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   db.state = { led: "on" };
   db.boxId = "box-a";
+  db.upsertEvent.mockResolvedValue({ error: null });
   db.rpc.mockResolvedValue({ data: 2, error: null });
   vi.mocked(readSharedTemplate).mockResolvedValue({ available: false, template: "" });
   db.write.mockImplementation(({ last_status }: { last_status: DeviceStatusPayload }) => {
@@ -192,4 +194,23 @@ it("accepts a single load cell for the whole box when configured", async () => {
       payload: { compartment: null, weight_g: 11.6, delta_g: -0.8, direction: "decreased" },
     }),
   );
+});
+
+
+it("deduplicates partial reports and leaves dose confirmation and stock unchanged", async () => {
+  db.boxId = "00000000-0000-4000-8000-000000000001";
+  const report = { type: "intake_partial", deviceId: db.boxId, compartment: 2,
+    scheduledDate: "2026-11-22", removedWeightG: 0.65 };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    expect((await receiveMqttStatus(request(report), db.boxId)).ok).toBe(true);
+  }
+  expect(db.upsertEvent).toHaveBeenCalledTimes(2);
+  expect(db.upsertEvent.mock.calls[0]).toEqual(db.upsertEvent.mock.calls[1]);
+  expect(db.upsertEvent).toHaveBeenCalledWith(expect.objectContaining({
+    device_id: db.boxId,
+    event_type: "intake_partial",
+    payload: { compartment: 2, scheduledDate: "2026-11-22", removedWeightG: 0.65 },
+  }), { onConflict: "id", ignoreDuplicates: true });
+  expect(db.rpc).not.toHaveBeenCalled();
+  expect((await receiveMqttStatus(request({ ...report, removedWeightG: 0 }), db.boxId)).status).toBe(400);
 });

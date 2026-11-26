@@ -5,6 +5,7 @@ import {
   doseTargetsBox,
   expandDoses,
   isDueNow,
+  partialIntakeKey,
   scheduleCompartment,
   scheduleFood,
   type Medicine,
@@ -72,6 +73,19 @@ describe("schedule expansion", () => {
       now: at(12),
     });
     expect(doses[0]?.status).toBe("taken");
+  });
+
+  it("shows a compartment's partial report until a manual confirmation takes precedence", () => {
+    const args = {
+      dates: ["2026-11-12"],
+      schedules: [base],
+      medicines: [{ ...med, device_id: "box-1", compartment: 2 }],
+      partialIntakes: new Set([partialIntakeKey("box-1", 2, "2026-11-12")]),
+      now: at(12),
+    };
+    expect(expandDoses({ ...args, logs: [] })[0]?.status).toBe("partial");
+    const log = { schedule_id: "s1", scheduled_date: "2026-11-12" } as DoseLog;
+    expect(expandDoses({ ...args, logs: [log] })[0]?.status).toBe("taken");
   });
 
   it("keeps recorded doses when a round is retired without adding new pending doses", () => {

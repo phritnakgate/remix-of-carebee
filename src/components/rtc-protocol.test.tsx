@@ -18,10 +18,11 @@ vi.mock("@/lib/rtc.functions", () => ({
 it("shows the saved time and full device-specific topics instead of a fixed example", async () => {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <RtcProtocol deviceId={deviceId} ownerId="owner" settings={mqttDefaults} open />
+      <RtcProtocol deviceId={deviceId} ownerId="owner" settings={{ ...mqttDefaults, compartmentWeightsG: [2.35, null, null, null, null, null] }} open />
     </QueryClientProvider>,
   );
   expect(await screen.findByText(/"time": "09:45"/)).toBeInTheDocument();
+  expect(screen.getByText(/"expectedDoseG": 2.35/)).toBeInTheDocument();
   expect(screen.getByText("medicine/schedule/" + deviceId)).toBeInTheDocument();
   expect(screen.getByText("medicine/sensor/" + deviceId)).toBeInTheDocument();
   expect(

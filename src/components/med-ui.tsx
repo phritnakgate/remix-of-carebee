@@ -43,8 +43,9 @@ const statusStyles: Record<DoseStatus, string> = {
   taken: "bg-taken-soft text-taken-foreground",
   pending: "bg-pending-soft text-pending-foreground",
   missed: "bg-missed-soft text-missed-foreground",
+  partial: "bg-yellow-100 text-yellow-900",
 };
-const statusIcon: Record<DoseStatus, typeof Check> = { taken: CheckCircle2, pending: Clock, missed: AlertCircle };
+const statusIcon: Record<DoseStatus, typeof Check> = { taken: CheckCircle2, pending: Clock, missed: AlertCircle, partial: AlertCircle };
 
 export function StatusBadge({ status, className }: { status: DoseStatus; className?: string }) {
   const { t } = useI18n();

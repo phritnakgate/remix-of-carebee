@@ -32,6 +32,7 @@ export const mqttSettingsSchema = z
     payload: z.string().max(mqttPayloadLimit),
     medicineIds: z.array(z.string().uuid()).max(500).nullable().default(null),
     rtc: z.boolean().default(false),
+    compartmentWeightsG: z.array(z.number().finite().positive().max(10000).nullable()).length(6).optional(),
   })
   .refine((settings) => settings.sensorTopic !== settings.scheduleTopic, {
     path: ["scheduleTopic"],

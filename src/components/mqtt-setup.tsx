@@ -16,6 +16,7 @@ import {
   type MqttSettings,
 } from "@/lib/mqtt";
 import { readMqttSettings, useMqttSession } from "@/lib/mqtt-session";
+import { RTC_CHANNELS } from "@/lib/rtc";
 import { cn } from "@/lib/utils";
 
 const states = {
@@ -185,6 +186,34 @@ export function MqttSetup({ deviceId, ownerId }: { deviceId: string; ownerId: st
               <code className="block break-all text-xs text-muted-foreground">
                 {boxTopic(settings.scheduleTopic.trim(), deviceId)}
               </code>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-semibold">{t("mqttDoseWeights")}</p>
+            <p className="text-sm text-muted-foreground">{t("mqttDoseWeightsHint")}</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {RTC_CHANNELS.map((compartment) => (
+                <div key={compartment}>
+                  <Label htmlFor={field(`dose-weight-${compartment}`)}>{t("compartment")} {compartment}</Label>
+                  <Input
+                    id={field(`dose-weight-${compartment}`)}
+                    type="number"
+                    step="any"
+                    min={0.001}
+                    max={10000}
+                    value={settings.compartmentWeightsG?.[compartment - 1] ?? ""}
+                    onChange={(event) => {
+                      const value = event.currentTarget.valueAsNumber;
+                      patch({
+                        compartmentWeightsG: RTC_CHANNELS.map((number) =>
+                          number === compartment ? (Number.isFinite(value) ? value : null) :
+                            settings.compartmentWeightsG?.[number - 1] ?? null,
+                        ),
+                      });
+                    }}
+                  />
+                </div>
+              ))}
             </div>
           </div>
         </fieldset>

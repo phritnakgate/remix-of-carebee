@@ -77,7 +77,7 @@ export function RtcProtocol({
       <div className="grid gap-2 sm:grid-cols-2">
         {config.data?.channels.map((channel) => {
           const slot = BOX_SLOTS.filter((item) => item !== "bedtime")[channel.compartment - 1]!;
-          const payload = JSON.stringify(rtcMqttPayload(channel), null, 2);
+          const payload = JSON.stringify(rtcMqttPayload(channel, settings.compartmentWeightsG?.[channel.compartment - 1]), null, 2);
           return (
             <div key={channel.compartment} className="min-w-0 rounded-lg border p-2">
               <div className="flex items-center justify-between gap-2">

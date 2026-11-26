@@ -12,14 +12,23 @@ export const rtcReportSchema = z
   })
   .passthrough();
 
+export const partialIntakeSchema = z.object({
+  type: z.literal("intake_partial"),
+  deviceId: z.string().uuid(),
+  compartment: z.number().int().min(1).max(6),
+  scheduledDate: z.string().date(),
+  removedWeightG: z.number().finite().positive().max(10000),
+});
+
 export function rtcMqttPayload(channel: {
   compartment: number;
   time: string | null;
   days: number[];
-}) {
+}, expectedDoseG?: number | null) {
   return {
     compartment: channel.compartment,
     time: channel.time,
+    ...(channel.time && channel.days.length && expectedDoseG != null ? { expectedDoseG } : {}),
     ...(channel.days.length === 7 ? {} : { days: channel.days }),
   };
 }

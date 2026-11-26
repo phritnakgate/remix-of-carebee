@@ -28,7 +28,7 @@ import { forwardMqttSensor, getMqttDue } from "./mqtt.functions";
 import { useDevices } from "./queries";
 import { readReminderTemplate, scheduledReminderPayload } from "./reminder-template";
 import { getRtcSchedule } from "./rtc.functions";
-import { rtcMqttPayload } from "./rtc";
+import { partialIntakeSchema, rtcMqttPayload } from "./rtc";
 
 const openMqtt = createClientOnlyFn(
   async (settings: MqttSettings, onTransport: (socket: WebSocket) => void) => {
@@ -308,7 +308,7 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
             const snapshot = JSON.stringify(config.channels);
             if (snapshot === rtcSnapshot) return;
             for (const channel of config.channels) {
-              if (!(await publishMessage(JSON.stringify(rtcMqttPayload(channel)), false))) return;
+              if (!(await publishMessage(JSON.stringify(rtcMqttPayload(channel, settings.compartmentWeightsG?.[channel.compartment - 1])), false))) return;
             }
             rtcSnapshot = snapshot;
             return;
@@ -454,9 +454,12 @@ export function MqttSessionProvider({ userId, children }: { userId: string; chil
                   if (settings.rtc) {
                     try {
                       const report = JSON.parse(message);
-                      if (report.deviceId === deviceId && report.isTake === true) {
+                      const partial = partialIntakeSchema.safeParse(report);
+                      if (partial.success) void queryClient.invalidateQueries({ queryKey: ["device_events", "partial"] });
+                      if (report.deviceId === deviceId && (report.isTake === true || partial.success)) {
                         await publishMessage(JSON.stringify({
                           type: "intake_ack", compartment: report.compartment,
+                          ...(partial.success ? { outcome: "partial" } : {}),
                           ...(report.scheduledDate ? { scheduledDate: report.scheduledDate } : {}),
                         }), false);
                       }
