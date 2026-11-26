@@ -66,6 +66,56 @@ bool oledOk = false;
 
 HX711 scale;
 bool scaleOk = false;
+float latestScaleGrams = NAN;
+uint32_t latestScaleMs = 0;
+float scaleStockSamples[3] = {};
+uint8_t scaleStockSampleCount = 0;
+uint8_t scaleStockSampleIndex = 0;
+
+static_assert(CAREBEE_HX711_COMPARTMENT >= 0 && CAREBEE_HX711_COMPARTMENT <= 6,
+              "Choose the single compartment physically weighed by the HX711, or 0 to disable");
+static_assert(CAREBEE_EMPTY_TOLERANCE_G > 0 && CAREBEE_STABLE_SPREAD_G > 0 &&
+              CAREBEE_STABLE_SPREAD_G <= CAREBEE_EMPTY_TOLERANCE_G,
+              "Use positive scale tolerances, with stability spread no larger than empty tolerance");
+
+enum class TrayReading : uint8_t { Unknown, Loaded, Empty };
+
+class TrayStability {
+ public:
+  TrayReading update(float grams, uint32_t now) {
+    const float difference = grams - EMPTY_TRAY_WEIGHT_G;
+    TrayReading reading = TrayReading::Unknown;
+    if (fabsf(difference) <= CAREBEE_EMPTY_TOLERANCE_G) reading = TrayReading::Empty;
+    if (difference > 2.0f * CAREBEE_EMPTY_TOLERANCE_G) reading = TrayReading::Loaded;
+    if (reading == TrayReading::Unknown) {
+      candidate = reading;
+      return reading;
+    }
+    if (candidate != reading || now - lastSample > 500U ||
+        fmaxf(high, grams) - fminf(low, grams) > CAREBEE_STABLE_SPREAD_G) {
+      candidate = reading;
+      since = now;
+      low = high = grams;
+    } else {
+      low = fminf(low, grams);
+      high = fmaxf(high, grams);
+    }
+    lastSample = now;
+    return now - since >= CAREBEE_STABLE_MS ? reading : TrayReading::Unknown;
+  }
+
+ private:
+  TrayReading candidate = TrayReading::Unknown;
+  uint32_t since = 0;
+  uint32_t lastSample = 0;
+  float low = 0;
+  float high = 0;
+};
+
+TrayStability trayStability;
+TrayReading stableTrayReading = TrayReading::Unknown;
+bool pickupSawLoaded = false;
+uint32_t lastPickupAttemptMs = 0;
 
 enum MedState : uint8_t { ST_IDLE, ST_REMIND, ST_WAIT_RESPONSE, ST_VERIFY_FACE };
 MedState state = ST_IDLE;
@@ -708,6 +758,11 @@ void startReminder(int8_t slot) {
   if (!channel.received || channel.minuteOfDay < 0 || !channel.daysMask) return;
   carebeeActiveDate = carebeeDate(nowTime());
   activeSlot = slot;
+  pickupSawLoaded = CAREBEE_HX711_COMPARTMENT == slot + 1 &&
+                    stableTrayReading == TrayReading::Loaded &&
+                    millis() - latestScaleMs <= 500U;
+  lastPickupAttemptMs = millis() - 2000U;
+  if (!pickupSawLoaded) trayStability = TrayStability{};
   faceTries = 0;
   lastRemindMs = 0;
   remindStartedMs = millis();
@@ -904,10 +959,52 @@ void markMissed() {
 }
 
 // ---------------------------------------------------------------- น้ำหนักยา / แจ้งเตือนคลังยา
+void sampleScaleAndCheckPickup() {
+  uint32_t now = millis();
+  if (!scaleOk || LOADCELL_CALIBRATION == 0.0f || now - latestScaleMs < 100U ||
+      !scale.is_ready()) return;
+
+  if (now - latestScaleMs > 500U) {
+    scaleStockSampleCount = 0;
+    scaleStockSampleIndex = 0;
+  }
+  latestScaleGrams = scale.get_units(1);
+  latestScaleMs = now;
+  if (!isfinite(latestScaleGrams)) {
+    trayStability = TrayStability{};
+    stableTrayReading = TrayReading::Unknown;
+    return;
+  }
+  scaleStockSamples[scaleStockSampleIndex] = latestScaleGrams;
+  scaleStockSampleIndex = (scaleStockSampleIndex + 1) % 3;
+  if (scaleStockSampleCount < 3) scaleStockSampleCount++;
+  stableTrayReading = trayStability.update(latestScaleGrams, now);
+
+  if (CAREBEE_HX711_COMPARTMENT == 0 || activeSlot + 1 != CAREBEE_HX711_COMPARTMENT ||
+      (state != ST_REMIND && state != ST_WAIT_RESPONSE) ||
+      now - remindStartedMs >= RESPONSE_TIMEOUT_MS) return;
+
+  if (stableTrayReading == TrayReading::Loaded) pickupSawLoaded = true;
+  if (!pickupSawLoaded || stableTrayReading != TrayReading::Empty ||
+      now - lastPickupAttemptMs < 2000U) return;
+
+  lastPickupAttemptMs = now;
+  Serial.printf("[HX711] compartment=%d stable empty after loaded (%.3f g)\n",
+                activeSlot + 1, latestScaleGrams);
+  if (FACE_VERIFY_ENABLED) {
+    pickupSawLoaded = false;
+    handleTakenPressed();
+  } else {
+    markTaken(false);
+  }
+}
+
 void updatePillsFromScale() {
-  if (!scaleOk || LOADCELL_CALIBRATION == 0.0f) return;
-  if (!scale.is_ready()) return;
-  float grams = scale.get_units(3);
+  if (!scaleStockSampleCount || !isfinite(latestScaleGrams) || millis() - latestScaleMs > 500U)
+    return;
+  float grams = 0;
+  for (uint8_t i = 0; i < scaleStockSampleCount; i++) grams += scaleStockSamples[i];
+  grams /= scaleStockSampleCount;
   int n = (int)lroundf((grams - EMPTY_TRAY_WEIGHT_G) / PILL_WEIGHT_G);
   if (n < 0) n = 0;
   if (n != (int)pillsRemaining) {
@@ -1102,12 +1199,13 @@ void setup() {
   for (uint8_t compartment = 1; compartment <= doseCount; compartment++) carebeeScheduleChanged(compartment);
   printSchedule();
 #if CAREBEE_ENABLE_SERIAL_TEST
-  Serial.println(F("[SERIAL] clock | schedule | request | ping | sensor 6 | take 6 | snooze | mute"));
+  Serial.println(F("[SERIAL] clock | scale | schedule | request | ping | sensor 6 | take 6 | snooze | mute"));
 #endif
 
   // --- เริ่มต้นสถานะวันนี้ ---
   DateTime n = nowTime();
   rolloverIfNeeded(n);
+  sampleScaleAndCheckPickup();
   updatePillsFromScale();
   updateDisplay();
 
@@ -1146,6 +1244,8 @@ void loop() {
   if ((state == ST_REMIND || state == ST_WAIT_RESPONSE) && !irSilenced) {
     digitalWrite(PIN_LED, ((millis() / LED_BLINK_MS) % 2) ? HIGH : LOW);
   }
+
+  sampleScaleAndCheckPickup();
 
   uint32_t nowMs = millis();
   if (nowMs - lastCheckMs >= 1000) {
@@ -1240,6 +1340,13 @@ void carebeeSerialTick() {
       DateTime n = nowTime();
       Serial.printf("[RTC] %04u-%02u-%02u %02u:%02u:%02u ready=%s\n", n.year(), n.month(), n.day(),
                     n.hour(), n.minute(), n.second(), carebeeClockReady() ? "yes" : "no");
+    } else if (command == "scale") {
+      if (isfinite(latestScaleGrams) && millis() - latestScaleMs <= 500U) {
+        Serial.printf("[HX711] reading=%.3f g empty-reference=%.3f g compartment=%u\n",
+                      latestScaleGrams, EMPTY_TRAY_WEIGHT_G, CAREBEE_HX711_COMPARTMENT);
+      } else {
+        Serial.println(F("[HX711] No fresh reading. Check wiring and LOADCELL_CALIBRATION."));
+      }
     } else if (command == "schedule") printSchedule();
     else if (command == "request") CareBee::requestSchedule();
     else if (command == "ping") CareBee::ping();
@@ -1250,7 +1357,7 @@ void carebeeSerialTick() {
     else if (sscanf(command.c_str(), "take %d %c", &compartment, &extra) == 1 && compartment >= 1 && compartment <= 6) {
       if (activeSlot == compartment - 1) handleTakenPressed();
       else Serial.println(F("[TAKE] Wait until that compartment is reminding. No intake sent."));
-    } else Serial.println(F("Commands: clock | schedule | request | ping | sensor 6 | take 6 | snooze | mute"));
+    } else Serial.println(F("Commands: clock | scale | schedule | request | ping | sensor 6 | take 6 | snooze | mute"));
   }
 }
 

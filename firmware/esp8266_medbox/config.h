@@ -75,7 +75,11 @@ struct DoseSlot {
 #define LOADCELL_CALIBRATION 0.0f
 #define PILLS_INITIAL 0
 #define PILL_WEIGHT_G 1.0f
-#define EMPTY_TRAY_WEIGHT_G 0.0f
+#define EMPTY_TRAY_WEIGHT_G 0.0f  // Measured empty tray after calibrating HX711 in grams.
+#define CAREBEE_HX711_COMPARTMENT 0  // 1-6: the single tray weighed by this HX711, 0: disabled.
+#define CAREBEE_EMPTY_TOLERANCE_G 0.10f  // Bench-test against noise and the lightest dose.
+#define CAREBEE_STABLE_SPREAD_G 0.05f
+#define CAREBEE_STABLE_MS 1200UL
 #define LOW_STOCK_PILLS 3
 
 #define ENABLE_BATTERY_CHECK 0
